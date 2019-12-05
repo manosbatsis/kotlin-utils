@@ -26,6 +26,7 @@ import javax.tools.Diagnostic.Kind.NOTE
  */
 interface ProcessingEnvironmentAware {
 
+    /** Override to implement [ProcessingEnvironment] access */
     val processingEnvironment: ProcessingEnvironment
 
     /** Returns all fields in this type that also appear as a constructor parameter. */
