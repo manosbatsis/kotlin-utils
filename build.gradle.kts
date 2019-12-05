@@ -38,7 +38,7 @@ apply(plugin = "signing")
 apply(plugin = "de.marcphilipp.nexus-publish")
 
 group = "com.github.manosbatsis.kotlinpoet-utils"
-version = "0.2"
+version = "0.3-SNAPSHOT"
 description ="KotlinPoet Utilities"
 
 
