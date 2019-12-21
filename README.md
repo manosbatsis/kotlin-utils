@@ -1,5 +1,4 @@
-# KotlinPoet Utils
-[![Maven Central](https://img.shields.io/maven-central/v/com.github.manosbatsis.kotlinpoet-utils/kotlinpoet-utils.svg)](http://central.maven.org/maven2/com/github/manosbatsis/kotlinpoet-utils/) 
+# KotlinPoet Utils [![Maven Central](https://img.shields.io/maven-central/v/com.github.manosbatsis.kotlinpoet-utils/kotlinpoet-utils.svg)](http://central.maven.org/maven2/com/github/manosbatsis/kotlinpoet-utils/) 
 
 
 KotlinPoet/Kapt utilities for Kotlin annotation processor (sub)components.
