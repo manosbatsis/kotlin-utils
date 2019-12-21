@@ -146,20 +146,54 @@ interface ProcessingEnvironmentAware {
         else null
     }
 
+    /** Get the mirror of the single annotation instance matching the given [annotationClass] for this element. */
     fun Element.getAnnotationMirror(annotationClass: Class<out Annotation>): AnnotationMirror =
             findAnnotationMirror(annotationClass)
                     ?: throw IllegalStateException("Annotation value not found for class ${annotationClass.name}")
 
-    fun Element.findAnnotationMirror(annotationClass: Class<out Annotation>): AnnotationMirror? {
+    /** Get the mirror of the single annotation instance matching the given [annotationClass] for this element. */
+    fun Element.findAnnotationMirror(annotationClass: Class<out Annotation>): AnnotationMirror? =
+            findAnnotationMirrors(annotationClass).firstOrNull()
+
+    /**
+     * Get the mirrors of the annotation instances matching the given [annotationClass] for this element.
+     * Mostly useful with [Repeatable] annotations.
+     */
+    fun Element.findAnnotationMirrors(annotationClass: Class<out Annotation>): List<AnnotationMirror> {
         val annotationClassName = annotationClass.name
         return this.annotationMirrors
-                .filter { m -> m.annotationType.toString().equals(annotationClassName) }
-                .firstOrNull()
+                .filter { mirror -> mirror != null && mirror.annotationType.toString().equals(annotationClassName) }
     }
 
+    /** Get the package name of this [TypeElement] */
+    fun TypeElement.getPackageName(): String {
+        return this.asKotlinClassName().topLevelClassName().packageName
+    }
+
+    /** Get the given annotation's value as a [TypeElement] if it exists, throw an error otherwise */
+    fun TypeElement.getAnnotationValueAsTypeElement(annotation: Class<out Annotation>, propertyName: String): TypeElement? =
+            this.findAnnotationValueAsTypeElement(annotation, propertyName)
+                    ?: throw IllegalStateException("Could not find a valid value for $propertyName")
+
+    /** Get the given annotation's value as a [TypeElement] if it exists, null otherwise */
+    fun TypeElement.findAnnotationValueAsTypeElement(annotation: Class<out Annotation>, propertyName: String): TypeElement? =
+            this.findAnnotationMirror(annotation)?.findValueAsTypeElement(propertyName)
+
+    /** Get the given annotation value as a [TypeElement] if it exists, null otherwise */
+    fun AnnotationMirror.findValueAsTypeElement(propertyName: String): TypeElement? {
+        val baseFlowAnnotationValue = this.getAnnotationValue(propertyName)
+        return processingEnvironment.typeUtils.asElement(baseFlowAnnotationValue.value as TypeMirror) as TypeElement?
+    }
+
+    /** Get the given annotation value as a [TypeElement] if it exists, throw an error otherwise */
+    fun AnnotationMirror.getValueAsTypeElement(propertyName: String): TypeElement =
+            this.findValueAsTypeElement(propertyName) ?: throw IllegalStateException("Could not find a valid value for $propertyName")
+
+    /** Get the given annotation value as a [AnnotationValue] if it exists, throw an error otherwise */
     fun AnnotationMirror.getAnnotationValue(name: String): AnnotationValue =
             findAnnotationValue(name) ?: throw IllegalStateException("Annotation value not found for string '$name'")
 
+    /** Get the given annotation value as a [AnnotationValue] if it exists, null otherwise */
     fun AnnotationMirror.findAnnotationValue(name: String): AnnotationValue?  =
                 processingEnvironment.elementUtils.getElementValuesWithDefaults(this).keys
                 .filter { k -> k.simpleName.toString() == name }
