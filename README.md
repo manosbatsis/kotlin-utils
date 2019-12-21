@@ -4,6 +4,16 @@
 
 KotlinPoet/Kapt utilities for Kotlin annotation processor (sub)components.
 
+Add to your build:
+
+```groovy
+
+dependencies {
+    // ...
+    api("com.github.manosbatsis.kotlinpoet-utils:kotlinpoet-utils:$kotlinpoetutils_version")
+}
+```
+
 To use, add the `ProcessingEnvironmentAware` to your annotation processor:
 
 ```kotlin
