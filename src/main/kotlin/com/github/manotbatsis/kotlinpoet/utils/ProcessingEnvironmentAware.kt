@@ -21,6 +21,7 @@ import javax.lang.model.util.ElementFilter
 import javax.tools.Diagnostic.Kind.ERROR
 import javax.tools.Diagnostic.Kind.NOTE
 
+
 /**
  * Baee processor implementation.
  */
@@ -41,27 +42,24 @@ interface ProcessingEnvironmentAware {
                     it.modifiers.contains(Modifier.PRIVATE)
                             || it.modifiers.contains(Modifier.PROTECTED)
                 }
-                .mapNotNull { it.simpleName.toString() }
+                .map { it.simpleName.toString() }
                 .toSet()
         return fields.filter { constructorParamNames.contains(it.simpleName.toString()) }
     }
 
 
-/**
-     * Converts this element to a [TypeName], ensuring that java types such as [java.lang.String] are converted to their Kotlin equivalent,
-     * also converting the TypeName according to any [CordaoNullableType] and [CordaoMutable] annotations.
+    /**
+     * Converts this element to a [TypeName], ensuring that Java types
+     * such as [java.lang.String] are converted to their Kotlin equivalent.
      */
-    fun Element.asKotlinTypeName(): TypeName {
-        var typeName = asType().asKotlinTypeName()
-        return typeName
-    }
+    fun Element.asKotlinTypeName(): TypeName = asType().asKotlinTypeName()
 
     /**
-     * Converts this element to a [TypeName], ensuring that java types such as [java.lang.String] are converted to their Kotlin equivalent,
-     * also converting the TypeName according to any [CordaoNullableType] and [CordaoMutable] annotations.
+     * Converts this element to a [TypeName], ensuring that Java types
+     * such as [java.lang.String] are converted to their Kotlin equivalent.
      */
     fun VariableElement.asKotlinTypeName(): TypeName {
-        var typeName = asType().asKotlinTypeName()
+        val typeName = asType().asKotlinTypeName()
         return if (this.isNullable()) typeName.copy(nullable = true) else typeName
     }
 
@@ -99,6 +97,12 @@ interface ProcessingEnvironmentAware {
 
     /** Returns the [TypeElement] represented by this [TypeMirror]. */
     fun TypeMirror.asTypeElement(): TypeElement = processingEnvironment.typeUtils.asElement(this) as TypeElement
+
+    /** Returns true if this element is assignable to the given class, false othjerwise */
+    fun Element.isAssignableTo(superType: Class<*>): Boolean {
+        val superTypeMirror: TypeMirror = processingEnvironment.elementUtils.getTypeElement(superType.canonicalName).asType()
+        return processingEnvironment.typeUtils.isAssignable(this.asType(), superTypeMirror)
+    }
 
     /** Returns true as long as this [Element] is not a [PrimitiveType] and does not have the [NotNull] core. */
     fun Element.isNullable(): Boolean {
@@ -171,17 +175,17 @@ interface ProcessingEnvironmentAware {
     }
 
     /** Get the given annotation's value as a [TypeElement] if it exists, throw an error otherwise */
-    fun TypeElement.getAnnotationValueAsTypeElement(annotation: Class<out Annotation>, propertyName: String): TypeElement? =
+    fun Element.getAnnotationValueAsTypeElement(annotation: Class<out Annotation>, propertyName: String): TypeElement? =
             this.findAnnotationValueAsTypeElement(annotation, propertyName)
                     ?: throw IllegalStateException("Could not find a valid value for $propertyName")
 
     /** Get the given annotation's value as a [TypeElement] if it exists, null otherwise */
-    fun TypeElement.findAnnotationValueAsTypeElement(annotation: Class<out Annotation>, propertyName: String): TypeElement? =
+    fun Element.findAnnotationValueAsTypeElement(annotation: Class<out Annotation>, propertyName: String): TypeElement? =
             this.findAnnotationMirror(annotation)?.findValueAsTypeElement(propertyName)
 
     /** Get the given annotation value as a [TypeElement] if it exists, null otherwise */
     fun AnnotationMirror.findValueAsTypeElement(propertyName: String): TypeElement? {
-        val baseFlowAnnotationValue = this.getAnnotationValue(propertyName)
+        val baseFlowAnnotationValue = this.findAnnotationValue(propertyName) ?: return null
         return processingEnvironment.typeUtils.asElement(baseFlowAnnotationValue.value as TypeMirror) as TypeElement?
     }
 
@@ -202,15 +206,15 @@ interface ProcessingEnvironmentAware {
 
     /** Prints an error message using this element as a position hint. */
     fun Element.errorMessage(message: () -> String) {
-        processingEnvironment.messager.printMessage(ERROR, message(), this)
+        processingEnvironment.messager.printMessage(ERROR, message()+"\n", this)
     }
 
     fun ProcessingEnvironment.errorMessage(message: () -> String) {
-        this.messager.printMessage(ERROR, message())
+        this.messager.printMessage(ERROR, message()+"\n")
     }
 
     fun ProcessingEnvironment.noteMessage(message: () -> String) {
-        this.messager.printMessage(NOTE, message())
+        this.messager.printMessage(NOTE, message()+"\n")
     }
 
     fun <T : Any> T.accessField(fieldName: String): Any? {
