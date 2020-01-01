@@ -1,6 +1,5 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import de.marcphilipp.gradle.nexus.NexusPublishExtension
-import org.gradle.plugins.ide.idea.model.IdeaLanguageLevel
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 object Versions {
     const val kotlin = "1.2.71"
@@ -31,144 +30,152 @@ plugins {
     idea
 }
 
-apply(plugin = "kotlin")
 apply<IdeaPlugin>()
-apply(plugin = "org.jetbrains.dokka")
-apply(plugin = "signing")
-apply(plugin = "de.marcphilipp.nexus-publish")
 
-group = "com.github.manosbatsis.kotlinpoet-utils"
-version = "0.5"
-description ="KotlinPoet Utilities"
-
-
-repositories {
-    mavenLocal()
-    jcenter()
-    mavenCentral()
-}
-
-dependencies {
-    // Use the Kotlin JDK 8 standard and reflection libs
-    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:${Versions.kotlin}")
-    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:${Versions.kotlin}")
-    implementation("org.jetbrains.kotlin:kotlin-reflect:${Versions.kotlin}")
-    // Use KotlinPoet
-    implementation("com.squareup:kotlinpoet:${Versions.kotlinpoet}")
-    // Use the Kotlin test library.
-    testImplementation("org.jetbrains.kotlin:kotlin-test:${Versions.kotlin}")
-    // Use the Kotlin JUnit integration.
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
-}
-
-configure<NexusPublishExtension> {
-    // We're constantly getting socket timeouts on Travis
-    //clientTimeout.set(Duration.ofMinutes(3))
+allprojects {
+    group = "com.github.manosbatsis.kotlin-utils"
+    version = "0.6"
+    description = "Kotlin Utilities"
 
     repositories {
-        sonatype()
+        mavenLocal()
+        jcenter()
+        mavenCentral()
     }
 }
 
+subprojects {
+    apply(plugin = "maven")
+    apply(plugin = "kotlin")
+    apply(plugin = "org.jetbrains.dokka")
+    apply(plugin = "signing")
+    apply(plugin = "de.marcphilipp.nexus-publish")
 
-tasks.withType<KotlinCompile> {
-    kotlinOptions {
-        jvmTarget = "1.8"
-        languageVersion = "1.2"
-        apiVersion = "1.2"
-        freeCompilerArgs = listOf("-Xjsr305=strict")
-        javaParameters = true   // Useful for reflection.
+    dependencies {
+        // Use the Kotlin JDK 8 standard and reflection libs
+        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:${Versions.kotlin}")
+        implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:${Versions.kotlin}")
+        implementation("org.jetbrains.kotlin:kotlin-reflect:${Versions.kotlin}")
+        // Use the Kotlin test library.
+        testImplementation("org.jetbrains.kotlin:kotlin-test:${Versions.kotlin}")
+        // Use the Kotlin JUnit integration.
+        testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
     }
-}
 
-val sourceSets = the<SourceSetContainer>()
-sourceSets {
-    getByName("main").java.srcDirs("src/main/kotlin")
-    getByName("test").java.srcDirs("src/main/kotlin")
-}
+    configure<NexusPublishExtension> {
+        // We're constantly getting socket timeouts on Travis
+        //clientTimeout.set(Duration.ofMinutes(3))
 
-val dokkaJar = task<Jar>("dokkaJar") {
-    group = JavaBasePlugin.DOCUMENTATION_GROUP
-    classifier = "javadoc"
-    //from(tasks["dokkajar"])
-}
-val sourcesJar by tasks.creating(Jar::class) {
-    classifier = "sources"
-    from(sourceSets["main"].java.srcDirs)
-}
+        repositories {
+            sonatype()
+        }
+    }
+
+    tasks.withType<KotlinCompile> {
+        kotlinOptions {
+            jvmTarget = "1.8"
+            languageVersion = "1.2"
+            apiVersion = "1.2"
+            freeCompilerArgs = listOf("-Xjsr305=strict")
+            javaParameters = true   // Useful for reflection.
+        }
+    }
+
+    val sourceSets = the<SourceSetContainer>()
+    sourceSets {
+        getByName("main").java.srcDirs("src/main/kotlin")
+        getByName("test").java.srcDirs("src/main/kotlin")
+    }
+
+
+    val dokkaJar = task<Jar>("dokkaJar") {
+        group = JavaBasePlugin.DOCUMENTATION_GROUP
+        classifier = "javadoc"
+        //from(tasks["dokkajar"])
+    }
+    val sourcesJar by tasks.creating(Jar::class) {
+        classifier = "sources"
+        from(sourceSets["main"].java.srcDirs)
+    }
+
 
 // based on:
 // https://github.com/Ordinastie/MalisisCore/blob/30d8efcfd047ac9e9bc75dfb76642bd5977f0305/build.gradle#L204-L256
 // https://github.com/gradle/kotlin-dsl/blob/201534f53d93660c273e09f768557220d33810a9/samples/maven-plugin/build.gradle.kts#L10-L44
-val uploadArchives: Upload by tasks
-uploadArchives.apply {
-    repositories {
-        withConvention(MavenRepositoryHandlerConvention::class) {
-            mavenDeployer {
-                // Sign Maven POM
-                beforeDeployment {
-                    signing.signPom(this)
-                }
-
-                val username =  project.properties["ossrhUsername"] ?: System.getenv("ossrhUsername") ?: System.getenv("USER")
-                val password = if (project.hasProperty("ossrhPassword")) project.properties["ossrhPassword"] else System.getenv("ossrhPassword")
-
-                withGroovyBuilder {
-                    "snapshotRepository"("url" to "https://oss.sonatype.org/content/repositories/snapshots") {
-                        "authentication"("userName" to username, "password" to password)
+    val uploadArchives: Upload by tasks
+    uploadArchives.apply {
+        repositories {
+            withConvention(MavenRepositoryHandlerConvention::class) {
+                mavenDeployer {
+                    // Sign Maven POM
+                    beforeDeployment {
+                        signing.signPom(this)
                     }
-                    "repository"("url" to "https://oss.sonatype.org/service/local/staging/deploy/maven2") {
-                        "authentication"("userName" to username, "password" to password)
-                    }
-                }
 
-                // Maven POM generation
-                pom.project {
+                    val username = project.properties["ossrhUsername"] ?: System.getenv("ossrhUsername")
+                    ?: System.getenv("USER")
+                    val password = if (project.hasProperty("ossrhPassword")) project.properties["ossrhPassword"] else System.getenv("ossrhPassword")
+
                     withGroovyBuilder {
-                        "name"(project.name)
-                        "artifactId"(base.archivesBaseName.toLowerCase())
-                        "packaging"("jar")
-                        "url"("https://github.com/manosbatsis/kotlinpoet-utils")
-                        "description"(project.description)
-                        "scm" {
-                            "connection"("scm:git:git://github.com/manosbatsis/kotlinpoet-utils.git")
-                            "developerConnection"("scm:git:ssh://git@github.com:manosbatsis/kotlinpoet-utils.git")
-                            "url"("https://github.com/manosbatsis/kotlinpoet-utils")
+                        "snapshotRepository"("url" to "https://oss.sonatype.org/content/repositories/snapshots") {
+                            "authentication"("userName" to username, "password" to password)
                         }
-                        "licenses" {
-                            "license" {
-                                "name"("Lesser General Public License, version 3 or greater")
-                                "url"("https://github.com/manosbatsis/kotlinpoet-utils/LICENSE")
-                                "distribution"("repo")
+                        "repository"("url" to "https://oss.sonatype.org/service/local/staging/deploy/maven2") {
+                            "authentication"("userName" to username, "password" to password)
+                        }
+                    }
+
+                    // Maven POM generation
+                    pom.project {
+                        withGroovyBuilder {
+                            "name"(project.name)
+                            "artifactId"(base.archivesBaseName.toLowerCase())
+                            "packaging"("jar")
+                            "url"("https://github.com/manosbatsis/kotlin-utils")
+                            "description"(project.description)
+                            "scm" {
+                                "connection"("scm:git:git://github.com/manosbatsis/kotlin-utils.git")
+                                "developerConnection"("scm:git:ssh://git@github.com:manosbatsis/kotlin-utils.git")
+                                "url"("https://github.com/manosbatsis/kotlin-utils")
                             }
-                        }
-                        "developers" {
-                            "developer" {
-                                "id"("manosbatsis")
-                                "name"("Manos Batsis")
-                                "email"("manosbatsis@gmail.com")
+                            "licenses" {
+                                "license" {
+                                    "name"("Lesser General Public License, version 3 or greater")
+                                    "url"("https://github.com/manosbatsis/kotlin-utils/LICENSE")
+                                    "distribution"("repo")
+                                }
                             }
-                        }
-                        "issueManagement" {
-                            "system"("github")
-                            "url"("https://github.com/manosbatsis/kotlinpoet-utils/issues")
+                            "developers" {
+                                "developer" {
+                                    "id"("manosbatsis")
+                                    "name"("Manos Batsis")
+                                    "email"("manosbatsis@gmail.com")
+                                }
+                            }
+                            "issueManagement" {
+                                "system"("github")
+                                "url"("https://github.com/manosbatsis/kotlin-utils/issues")
+                            }
                         }
                     }
                 }
             }
         }
     }
-}
 // tasks must be before artifacts, don't change the order
-artifacts {
-    withGroovyBuilder {
-        "archives"(tasks["jar"], sourcesJar, dokkaJar)
+    artifacts {
+        withGroovyBuilder {
+            "archives"(tasks["jar"], sourcesJar, dokkaJar)
+        }
     }
-}
-if("<YOUR-PASSWORD>" != project.findProperty("signing.password")) {
-    // Conditional signature of artifacts
-    signing {
-        sign(tasks["jar"], sourcesJar, dokkaJar)
+    if ("<YOUR-PASSWORD>" != project.findProperty("signing.password")) {
+        // Conditional signature of artifacts
+        signing {
+            sign(tasks["jar"], sourcesJar, dokkaJar)
+        }
+
     }
 
 }
+
+

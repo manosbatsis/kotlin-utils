@@ -4,7 +4,6 @@
 package com.github.manosbatsis.kotlinpoet.utils
 
 import kotlin.test.Test
-import kotlin.test.assertTrue
 
 class BaseProcessorTest {
     @Test fun testSomeLibraryMethod() {

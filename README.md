@@ -1,4 +1,4 @@
-# KotlinPoet Utils [![Maven Central](https://img.shields.io/maven-central/v/com.github.manosbatsis.kotlinpoet-utils/kotlinpoet-utils.svg)](http://central.maven.org/maven2/com/github/manosbatsis/kotlinpoet-utils/) 
+# KotlinPoet Utils [![Maven Central](https://img.shields.io/maven-central/v/com.github.manosbatsis.kotlin-utils/kotlin-utils.svg)](http://central.maven.org/maven2/com/github/manosbatsis/kotlin-utils/) 
 
 
 KotlinPoet/Kapt utilities for Kotlin annotation processor (sub)components.
@@ -9,7 +9,7 @@ Add to your build:
 
 dependencies {
     // ...
-    api("com.github.manosbatsis.kotlinpoet-utils:kotlinpoet-utils:$kotlinpoetutils_version")
+    api("com.github.manosbatsis.kotlin-utils:kotlin-utils:$kotlinpoetutils_version")
 }
 ```
 

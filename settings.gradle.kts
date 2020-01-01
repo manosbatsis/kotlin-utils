@@ -6,7 +6,7 @@
  * Detailed information about configuring a multi-project build in Gradle can be found
  * in the user manual at https://docs.gradle.org/5.4.1/userguide/multi_project_builds.html
  */
-rootProject.name = "kotlinpoet-utils"
+rootProject.name = "kotlin-utils"
 
 file(".").listFiles().forEach {
     if (File(it, "build.gradle.kts").exists()) include(it.name)

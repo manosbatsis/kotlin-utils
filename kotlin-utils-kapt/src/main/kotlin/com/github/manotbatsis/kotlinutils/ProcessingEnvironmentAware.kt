@@ -1,8 +1,18 @@
 package com.github.manosbatsis.kotlinpoet.utils
 
+import com.github.manosbatsis.kotlinpoet.utils.api.Dto
+import com.github.manosbatsis.kotlinpoet.utils.api.DtoInsufficientMappingException
 import com.squareup.kotlinpoet.ClassName
+import com.squareup.kotlinpoet.CodeBlock
+import com.squareup.kotlinpoet.FunSpec
+import com.squareup.kotlinpoet.KModifier.DATA
+import com.squareup.kotlinpoet.KModifier.OVERRIDE
+import com.squareup.kotlinpoet.KModifier.PUBLIC
+import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.TypeName
+import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.asClassName
 import com.squareup.kotlinpoet.asTypeName
 import org.jetbrains.annotations.NotNull
@@ -21,6 +31,15 @@ import javax.lang.model.util.ElementFilter
 import javax.tools.Diagnostic.Kind.ERROR
 import javax.tools.Diagnostic.Kind.NOTE
 
+
+data class DtoInfo(
+        val originalTypeElement: TypeElement,
+        val fields: List<VariableElement>,
+        val targetPackage: String,
+        val kdoc: CodeBlock? = null
+) {
+    val originalTypeName by lazy { originalTypeElement.asType().asTypeName() }
+}
 
 /**
  * Baee processor implementation.
@@ -47,6 +66,87 @@ interface ProcessingEnvironmentAware {
         return fields.filter { constructorParamNames.contains(it.simpleName.toString()) }
     }
 
+
+    fun dtoSpecBuilder(dtoInfo: DtoInfo): TypeSpec.Builder {
+        // Create DTO type
+        val dtoTypeSpecBuilder = TypeSpec.classBuilder(
+                ClassName(dtoInfo.targetPackage, "${dtoInfo.originalTypeElement.simpleName}Dto"))
+                .addSuperinterface(Dto::class.asClassName().parameterizedBy(dtoInfo.originalTypeName))
+                .addModifiers(DATA)
+                .addKdoc("A [%T]-specific [%T] implementation", dtoInfo.originalTypeName, Dto::class)
+        // Contract state parameter, used in alt constructor and util functions
+        val stateParameter = ParameterSpec.builder("original", dtoInfo.originalTypeName).build()
+        // Create DTO primary constructor
+        val dtoConstructorBuilder = FunSpec.constructorBuilder()
+        // Create DTO alternative constructor
+        val dtoAltConstructorBuilder = FunSpec.constructorBuilder().addParameter(stateParameter)
+                .addKdoc(CodeBlock.builder()
+                        .addStatement("Alternative constructor, used to map ")
+                        .addStatement("from the given [%T] instance.", dtoInfo.originalTypeName).build())
+        val dtoAltConstructorCodeBuilder = CodeBlock.builder().addStatement("")
+        // Create patch function
+        val patchFunctionBuilder = FunSpec.builder("toPatched")
+                .addModifiers(OVERRIDE)
+                .addKdoc(CodeBlock.builder()
+                        .addStatement("Create a patched copy of the given [%T] instance,", dtoInfo.originalTypeName)
+                        .addStatement("updated using this DTO's non-null properties.").build())
+                .addParameter(stateParameter)
+                .returns(dtoInfo.originalTypeName)
+        val patchFunctionCodeBuilder = CodeBlock.builder().addStatement("val patched = %T(", dtoInfo.originalTypeName)
+        // Create mapping function
+        val toStateFunctionBuilder = FunSpec.builder("toTargetType")
+                .addModifiers(OVERRIDE)
+                .addKdoc(CodeBlock.builder()
+                        .addStatement("Create an instance of [%T], using this DTO's properties.", dtoInfo.originalTypeName)
+                        .addStatement("May throw a [DtoInsufficientStateMappingException] ")
+                        .addStatement("if there is mot enough information to do so.").build())
+                .returns(dtoInfo.originalTypeName)
+        val toStateFunctionCodeBuilder = CodeBlock.builder()
+                .addStatement("try {")
+                .addStatement("   val originalTypeInstance = %T(", dtoInfo.originalTypeName)
+
+        dtoInfo.fields.forEachIndexed { index, variableElement ->
+            val commaOrEmpty = if (index + 1 < dtoInfo.fields.size) "," else ""
+            // Tell KotlinPoet that the property is initialized via the constructor parameter,
+            // by creating both a constructor param and member property
+            val propertyName = variableElement.simpleName.toString()
+            val propertyType = variableElement.asKotlinTypeName().copy(nullable = true)
+            dtoConstructorBuilder.addParameter(ParameterSpec.builder(propertyName, propertyType)
+                    .defaultValue("null")
+                    .build())
+            dtoTypeSpecBuilder.addProperty(PropertySpec.builder(propertyName, propertyType)
+                    .mutable()
+                    .addModifiers(PUBLIC)
+                    .initializer(propertyName).build())
+            // Add line to path function
+            patchFunctionCodeBuilder.addStatement("      $propertyName = this.$propertyName ?: original.$propertyName$commaOrEmpty")
+            // Add line to map function
+            val nullableOrNot = if (variableElement.isNullable()) "" else "!!"
+            toStateFunctionCodeBuilder.addStatement("      $propertyName = this.$propertyName$nullableOrNot$commaOrEmpty")
+            // Add line to alt constructor
+            dtoAltConstructorCodeBuilder.addStatement("      $propertyName = original.$propertyName$commaOrEmpty")
+        }
+
+        // Complete alt constructor
+        dtoAltConstructorBuilder.callThisConstructor(dtoAltConstructorCodeBuilder.build())
+        // Complete patch function
+        patchFunctionCodeBuilder.addStatement(")")
+        patchFunctionCodeBuilder.addStatement("return patched")
+        // Complete mappiong function
+
+        toStateFunctionCodeBuilder.addStatement("   )")
+        toStateFunctionCodeBuilder.addStatement("   return originalTypeInstance")
+        toStateFunctionCodeBuilder.addStatement("}")
+        toStateFunctionCodeBuilder.addStatement("catch(e: Exception) {")
+        toStateFunctionCodeBuilder.addStatement("   throw %T(exception = e)", DtoInsufficientMappingException::class)
+        toStateFunctionCodeBuilder.addStatement("}")
+
+        return dtoTypeSpecBuilder
+                .primaryConstructor(dtoConstructorBuilder.build())
+                .addFunction(dtoAltConstructorBuilder.build())
+                .addFunction(patchFunctionBuilder.addCode(patchFunctionCodeBuilder.build()).build())
+                .addFunction(toStateFunctionBuilder.addCode(toStateFunctionCodeBuilder.build()).build())
+    }
 
     /**
      * Converts this element to a [TypeName], ensuring that Java types
