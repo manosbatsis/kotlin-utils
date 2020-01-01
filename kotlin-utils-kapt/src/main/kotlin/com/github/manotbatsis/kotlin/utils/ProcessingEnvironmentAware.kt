@@ -2,6 +2,9 @@
 
  import com.github.manosbatsis.kotlin.utils.api.Dto
  import com.github.manosbatsis.kotlin.utils.api.DtoInsufficientMappingException
+ import com.squareup.kotlinpoet.AnnotationSpec
+ import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget
+ import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget.FIELD
  import com.squareup.kotlinpoet.ClassName
  import com.squareup.kotlinpoet.CodeBlock
  import com.squareup.kotlinpoet.FunSpec
@@ -12,9 +15,9 @@
  import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
  import com.squareup.kotlinpoet.PropertySpec
  import com.squareup.kotlinpoet.TypeName
-import com.squareup.kotlinpoet.TypeSpec
-import com.squareup.kotlinpoet.asClassName
-import com.squareup.kotlinpoet.asTypeName
+ import com.squareup.kotlinpoet.TypeSpec
+ import com.squareup.kotlinpoet.asClassName
+ import com.squareup.kotlinpoet.asTypeName
 import org.jetbrains.annotations.NotNull
 import javax.annotation.processing.ProcessingEnvironment
 import javax.lang.model.element.AnnotationMirror
@@ -36,7 +39,8 @@ data class DtoInfo(
         val originalTypeElement: TypeElement,
         val fields: List<VariableElement>,
         val targetPackage: String,
-        val kdoc: CodeBlock? = null
+        val copyAnnotationPackages: Iterable<String> = emptyList()
+
 ) {
     val originalTypeName by lazy { originalTypeElement.asType().asTypeName() }
 }
@@ -66,6 +70,34 @@ interface ProcessingEnvironmentAware {
         return fields.filter { constructorParamNames.contains(it.simpleName.toString()) }
     }
 
+    fun Iterable<String>.hasBasePackageOf(packageName: String): Boolean {
+        this.forEach { basePkg ->
+            if (packageName.startsWith(basePkg)) return true
+        }
+        return false
+    }
+
+    fun filterAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>): List<AnnotationMirror> {
+        return source.annotationMirrors.filter { annotationMirror ->
+            val annotationPackage = annotationMirror.annotationType.asTypeElement().getPackageName()
+            val match = basePackages.hasBasePackageOf(annotationPackage)
+            match
+        }
+    }
+
+    fun TypeSpec.Builder.copyAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>): TypeSpec.Builder {
+        filterAnnotationsByBasePackage(source, basePackages).forEach {
+            this.addAnnotation(AnnotationSpec.get(it))
+        }
+        return this
+    }
+
+    fun PropertySpec.Builder.copyAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>, siteTarget: UseSiteTarget? = null): PropertySpec.Builder {
+        filterAnnotationsByBasePackage(source, basePackages).forEach {
+            this.addAnnotation(AnnotationSpec.get(it).toBuilder().useSiteTarget(siteTarget).build())
+        }
+        return this
+    }
 
     fun dtoSpecBuilder(dtoInfo: DtoInfo): TypeSpec.Builder {
         // Create DTO type
@@ -74,6 +106,8 @@ interface ProcessingEnvironmentAware {
                 .addSuperinterface(Dto::class.asClassName().parameterizedBy(dtoInfo.originalTypeName))
                 .addModifiers(DATA)
                 .addKdoc("A [%T]-specific [%T] implementation", dtoInfo.originalTypeName, Dto::class)
+                // Copy annotations as desired
+                .copyAnnotationsByBasePackage(dtoInfo.originalTypeElement, dtoInfo.copyAnnotationPackages)
         // Contract state parameter, used in alt constructor and util functions
         val stateParameter = ParameterSpec.builder("original", dtoInfo.originalTypeName).build()
         // Create DTO primary constructor
@@ -114,10 +148,13 @@ interface ProcessingEnvironmentAware {
             dtoConstructorBuilder.addParameter(ParameterSpec.builder(propertyName, propertyType)
                     .defaultValue("null")
                     .build())
+
             dtoTypeSpecBuilder.addProperty(PropertySpec.builder(propertyName, propertyType)
                     .mutable()
                     .addModifiers(PUBLIC)
-                    .initializer(propertyName).build())
+                    .initializer(propertyName)
+                    // Copy annotations as desired
+                    .copyAnnotationsByBasePackage(variableElement, dtoInfo.copyAnnotationPackages, FIELD).build())
             // Add line to path function
             patchFunctionCodeBuilder.addStatement("      $propertyName = this.$propertyName ?: original.$propertyName$commaOrEmpty")
             // Add line to map function
@@ -291,26 +328,34 @@ interface ProcessingEnvironmentAware {
 
     /** Get the given annotation value as a [TypeElement] if it exists, throw an error otherwise */
     fun AnnotationMirror.getValueAsTypeElement(propertyName: String): TypeElement =
-            this.findValueAsTypeElement(propertyName) ?: throw IllegalStateException("Could not find a valid value for $propertyName")
+            this.findValueAsTypeElement(propertyName)
+                    ?: throw IllegalStateException("Could not find a valid value for $propertyName")
 
     /** Get the given annotation value as a [AnnotationValue] if it exists, throw an error otherwise */
     fun AnnotationMirror.getAnnotationValue(name: String): AnnotationValue =
             findAnnotationValue(name) ?: throw IllegalStateException("Annotation value not found for string '$name'")
 
     /** Get the given annotation value as a [AnnotationValue] if it exists, null otherwise */
-    fun AnnotationMirror.findAnnotationValue(name: String): AnnotationValue?  =
-                processingEnvironment.elementUtils.getElementValuesWithDefaults(this).keys
-                .filter { k -> k.simpleName.toString() == name }
-                .mapNotNull { k -> elementValues[k] }
-                .firstOrNull()
+    fun AnnotationMirror.findAnnotationValue(name: String): AnnotationValue? =
+            processingEnvironment.elementUtils.getElementValuesWithDefaults(this).keys
+                    .filter { k -> k.simpleName.toString() == name }
+                    .mapNotNull { k -> elementValues[k] }
+                    .firstOrNull()
+
+    /** Get the given annotation value as a list of [AnnotationValue] if it exists, null otherwise */
+    fun AnnotationMirror.findAnnotationValueList(name: String): List<AnnotationValue>? =
+            processingEnvironment.elementUtils.getElementValuesWithDefaults(this).keys
+                    .filter { k -> k.simpleName.toString() == name }
+                    .mapNotNull { k -> elementValues[k] }
+                    .firstOrNull()?.value as List<AnnotationValue>?
 
     /** Prints an error message using this element as a position hint. */
     fun Element.errorMessage(message: () -> String) {
-        processingEnvironment.messager.printMessage(ERROR, message()+"\n", this)
+        processingEnvironment.messager.printMessage(ERROR, message() + "\n", this)
     }
 
     fun ProcessingEnvironment.errorMessage(message: () -> String) {
-        this.messager.printMessage(ERROR, message()+"\n")
+        this.messager.printMessage(ERROR, message() + "\n")
     }
 
     fun ProcessingEnvironment.noteMessage(message: () -> String) {
