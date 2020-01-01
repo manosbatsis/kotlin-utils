@@ -1,4 +1,4 @@
-# Kotlin Utils [![Maven Central](https://img.shields.io/maven-central/v/com.github.manosbatsis.kotlin-utils/kotlin-utils.svg)](http://central.maven.org/maven2/com/github/manosbatsis/kotlin-utils/) 
+# Kotlin Utils [![Maven Central](https://img.shields.io/maven-central/v/com.github.manosbatsis.kotlin-utils/kotlin-utils-api.svg)](http://central.maven.org/maven2/com/github/manosbatsis/kotlin-utils/) 
 
 
 ## Utils API
