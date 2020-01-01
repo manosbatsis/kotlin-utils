@@ -1,4 +1,4 @@
-# KotlinPoet Utils [![Maven Central](https://img.shields.io/maven-central/v/com.github.manosbatsis.kotlin-utils/kotlin-utils.svg)](http://central.maven.org/maven2/com/github/manosbatsis/kotlin-utils/) 
+# Kotlin Utils [![Maven Central](https://img.shields.io/maven-central/v/com.github.manosbatsis.kotlin-utils/kotlin-utils.svg)](http://central.maven.org/maven2/com/github/manosbatsis/kotlin-utils/) 
 
 
 ## Utils API
@@ -23,7 +23,7 @@ To use, add the `ProcessingEnvironmentAware` to your annotation processor:
 
 ```kotlin
 import javax.annotation.processing.AbstractProcessor.AbstractProcessor
-import com.github.manosbatsis.kotlinpoet.utils.ProcessingEnvironmentAware
+import com.github.manosbatsis.kotlin.utils.ProcessingEnvironmentAware
 
 class MyAnnotationProcessor : AbstractProcessor(), ProcessingEnvironmentAware {
 
@@ -43,7 +43,7 @@ class MyAnnotationProcessor : AbstractProcessor(), ProcessingEnvironmentAware {
 
 ```kotlin
 import javax.annotation.processing.AbstractProcessor.AbstractProcessor
-import com.github.manosbatsis.kotlinpoet.utils.ProcessingEnvironmentAware
+import com.github.manosbatsis.kotlin.utils.ProcessingEnvironmentAware
 
 class MyCustomAnnotationProcessingComponent(
     override val processingEnvironment: ProcessingEnvironment 
