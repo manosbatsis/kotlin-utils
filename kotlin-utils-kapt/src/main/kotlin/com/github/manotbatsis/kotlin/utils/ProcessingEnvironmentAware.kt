@@ -322,8 +322,14 @@ interface ProcessingEnvironmentAware {
 
     /** Get the given annotation value as a [TypeElement] if it exists, null otherwise */
     fun AnnotationMirror.findValueAsTypeElement(propertyName: String): TypeElement? {
+        val annotationMirrorValue = this.findValueAsTypeMirror(propertyName) ?: return null
+        return processingEnvironment.typeUtils.asElement(annotationMirrorValue) as TypeElement?
+    }
+
+    /** Get the given annotation value as a [TypeElement] if it exists, null otherwise */
+    fun AnnotationMirror.findValueAsTypeMirror(propertyName: String): TypeMirror? {
         val baseFlowAnnotationValue = this.findAnnotationValue(propertyName) ?: return null
-        return processingEnvironment.typeUtils.asElement(baseFlowAnnotationValue.value as TypeMirror) as TypeElement?
+        return baseFlowAnnotationValue.value as TypeMirror
     }
 
     /** Get the given annotation value as a [TypeElement] if it exists, throw an error otherwise */
@@ -343,11 +349,11 @@ interface ProcessingEnvironmentAware {
                     .firstOrNull()
 
     /** Get the given annotation value as a list of [AnnotationValue] if it exists, null otherwise */
-    fun AnnotationMirror.findAnnotationValueList(name: String): List<AnnotationValue>? =
-            processingEnvironment.elementUtils.getElementValuesWithDefaults(this).keys
-                    .filter { k -> k.simpleName.toString() == name }
-                    .mapNotNull { k -> elementValues[k] }
-                    .firstOrNull()?.value as List<AnnotationValue>?
+    fun AnnotationMirror.findAnnotationValueList(memberName: String): List<AnnotationValue>? =
+            processingEnvironment.elementUtils.getElementValuesWithDefaults(this).entries
+                    .filter { it.key.simpleName.toString() == memberName }
+                    .mapNotNull { it.value.value }
+                    .firstOrNull() as List<AnnotationValue>?
 
     /** Prints an error message using this element as a position hint. */
     fun Element.errorMessage(message: () -> String) {

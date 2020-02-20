@@ -19,3 +19,12 @@ interface Dto<T : Any> {
      */
     fun toTargetType(): T
 }
+
+/**
+ * Let annotation processors know the desired type for a property.
+ */
+@Retention(AnnotationRetention.SOURCE)
+@Target(AnnotationTarget.FIELD)
+annotation class UseType(
+        val value: String
+)
