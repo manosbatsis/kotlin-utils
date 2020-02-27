@@ -3,7 +3,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 object Versions {
     const val kotlin = "1.2.71"
-    const val kotlinpoet = "1.4.1"
+    const val kotlinpoet = "1.5.0"
     const val dokka = "0.9.18"
 
     /* test */
@@ -34,7 +34,7 @@ apply<IdeaPlugin>()
 
 allprojects {
     group = "com.github.manosbatsis.kotlin-utils"
-    version = "0.9"
+    version = "0.10"
     description = "Kotlin Utilities"
 
     repositories {

@@ -1,5 +1,6 @@
  package com.github.manosbatsis.kotlin.utils
 
+ import com.github.manosbatsis.kotlin.utils.api.DefaultValue
  import com.github.manosbatsis.kotlin.utils.api.Dto
  import com.github.manosbatsis.kotlin.utils.api.DtoInsufficientMappingException
  import com.squareup.kotlinpoet.AnnotationSpec
@@ -145,8 +146,10 @@ interface ProcessingEnvironmentAware {
             // by creating both a constructor param and member property
             val propertyName = variableElement.simpleName.toString()
             val propertyType = variableElement.asKotlinTypeName().copy(nullable = true)
+            val propertyDefaultValue = variableElement
+                    .findAnnotationValue(DefaultValue::class.java, "value")?.value?.toString() ?: "null"
             dtoConstructorBuilder.addParameter(ParameterSpec.builder(propertyName, propertyType)
-                    .defaultValue("null")
+                    .defaultValue(propertyDefaultValue)
                     .build())
 
             dtoTypeSpecBuilder.addProperty(PropertySpec.builder(propertyName, propertyType)
@@ -319,6 +322,10 @@ interface ProcessingEnvironmentAware {
     /** Get the given annotation's value as a [TypeElement] if it exists, null otherwise */
     fun Element.findAnnotationValueAsTypeElement(annotation: Class<out Annotation>, propertyName: String): TypeElement? =
             this.findAnnotationMirror(annotation)?.findValueAsTypeElement(propertyName)
+
+    /** Get the given annotation's value if it exists, null otherwise */
+    fun Element.findAnnotationValue(annotation: Class<out Annotation>, propertyName: String): AnnotationValue? =
+            this.findAnnotationMirror(annotation)?.findAnnotationValue(propertyName)
 
     /** Get the given annotation value as a [TypeElement] if it exists, null otherwise */
     fun AnnotationMirror.findValueAsTypeElement(propertyName: String): TypeElement? {

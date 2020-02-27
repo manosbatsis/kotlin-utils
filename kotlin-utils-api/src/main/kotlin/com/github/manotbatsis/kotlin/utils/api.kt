@@ -21,10 +21,10 @@ interface Dto<T : Any> {
 }
 
 /**
- * Let annotation processors know the desired type for a property.
+ * Let annotation processors know the desired default value for a property.
  */
 @Retention(AnnotationRetention.SOURCE)
 @Target(AnnotationTarget.FIELD)
-annotation class UseType(
+annotation class DefaultValue(
         val value: String
 )
