@@ -1,17 +1,10 @@
  package com.github.manosbatsis.kotlin.utils
 
- import com.github.manosbatsis.kotlin.utils.api.DefaultValue
- import com.github.manosbatsis.kotlin.utils.api.Dto
- import com.github.manosbatsis.kotlin.utils.api.DtoInsufficientMappingException
+ import com.github.manotbatsis.kotlin.utils.dto.DtoTypeSpecBuilder
  import com.squareup.kotlinpoet.AnnotationSpec
  import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget
- import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget.FIELD
  import com.squareup.kotlinpoet.ClassName
- import com.squareup.kotlinpoet.CodeBlock
  import com.squareup.kotlinpoet.FunSpec
- import com.squareup.kotlinpoet.KModifier.DATA
- import com.squareup.kotlinpoet.KModifier.OVERRIDE
- import com.squareup.kotlinpoet.KModifier.PUBLIC
  import com.squareup.kotlinpoet.ParameterSpec
  import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
  import com.squareup.kotlinpoet.PropertySpec
@@ -36,17 +29,7 @@ import javax.tools.Diagnostic.Kind.ERROR
 import javax.tools.Diagnostic.Kind.NOTE
 
 
-data class DtoInfo(
-        val originalTypeElement: TypeElement,
-        val fields: List<VariableElement>,
-        val targetPackage: String,
-        val copyAnnotationPackages: Iterable<String> = emptyList()
-
-) {
-    val originalTypeName by lazy { originalTypeElement.asType().asTypeName() }
-}
-
-/**
+ /**
  * Baee processor implementation.
  */
 interface ProcessingEnvironmentAware {
@@ -57,7 +40,7 @@ interface ProcessingEnvironmentAware {
     /** Returns all fields in this type that also appear as a constructor parameter. */
     fun TypeElement.accessibleConstructorParameterFields(): List<VariableElement> {
         val allMembers = processingEnvironment.elementUtils.getAllMembers(this)
-        val fields = ElementFilter.fieldsIn(allMembers)
+        val fields = ElementFilter.fieldsIn(allMembers).filterNot { it.kind.isClass || it.kind.isInterface }
         val constructors = ElementFilter.constructorsIn(allMembers)
         val constructorParamNames = constructors
                 .flatMap { it.parameters }
@@ -78,115 +61,53 @@ interface ProcessingEnvironmentAware {
         return false
     }
 
-    fun filterAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>): List<AnnotationMirror> {
-        return source.annotationMirrors.filter { annotationMirror ->
-            val annotationPackage = annotationMirror.annotationType.asTypeElement().getPackageName()
-            val match = basePackages.hasBasePackageOf(annotationPackage)
-            match
-        }
-    }
+     fun filterAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>): List<AnnotationMirror> {
+         return source.annotationMirrors.filter { annotationMirror ->
+             val annotationPackage = annotationMirror.annotationType.asTypeElement().getPackageName()
+             val match = basePackages.hasBasePackageOf(annotationPackage)
+             match
+         }
+     }
 
-    fun TypeSpec.Builder.copyAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>): TypeSpec.Builder {
-        filterAnnotationsByBasePackage(source, basePackages).forEach {
-            this.addAnnotation(AnnotationSpec.get(it))
-        }
-        return this
-    }
+     /** A constructor property parameter */
+     class ConstructorProperty(val propertySpec: PropertySpec, val defaultValue: String? = null)
 
-    fun PropertySpec.Builder.copyAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>, siteTarget: UseSiteTarget? = null): PropertySpec.Builder {
-        filterAnnotationsByBasePackage(source, basePackages).forEach {
+     /** Create a constructor with property parameters */
+     fun TypeSpec.Builder.primaryConstructor(vararg properties: PropertySpec): TypeSpec.Builder =
+             this.primaryConstructor(*properties.map { ConstructorProperty(it) }.toTypedArray())
+
+     /** Create a constructor with property parameters */
+     fun TypeSpec.Builder.primaryConstructor(vararg properties: ConstructorProperty): TypeSpec.Builder {
+         val propertySpecs = properties.map { it.propertySpec.toBuilder().initializer(it.propertySpec.name).build() }
+         val parameters = properties.map {
+             val paramSpec = ParameterSpec.builder(it.propertySpec.name, it.propertySpec.type)
+             if (it.defaultValue != null) paramSpec.defaultValue(it.defaultValue)
+             paramSpec.build()
+         }
+         val constructor = FunSpec.constructorBuilder()
+                 .addParameters(parameters)
+                 .build()
+
+         return this
+                 .primaryConstructor(constructor)
+                 .addProperties(propertySpecs)
+     }
+
+     fun TypeSpec.Builder.copyAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>): TypeSpec.Builder {
+         filterAnnotationsByBasePackage(source, basePackages).forEach {
+             this.addAnnotation(AnnotationSpec.get(it))
+         }
+         return this
+     }
+
+     fun PropertySpec.Builder.copyAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>, siteTarget: UseSiteTarget? = null): PropertySpec.Builder {
+         filterAnnotationsByBasePackage(source, basePackages).forEach {
             this.addAnnotation(AnnotationSpec.get(it).toBuilder().useSiteTarget(siteTarget).build())
         }
         return this
     }
 
-    fun dtoSpecBuilder(dtoInfo: DtoInfo): TypeSpec.Builder {
-        // Create DTO type
-        val dtoTypeSpecBuilder = TypeSpec.classBuilder(
-                ClassName(dtoInfo.targetPackage, "${dtoInfo.originalTypeElement.simpleName}Dto"))
-                .addSuperinterface(Dto::class.asClassName().parameterizedBy(dtoInfo.originalTypeName))
-                .addModifiers(DATA)
-                .addKdoc("A [%T]-specific [%T] implementation", dtoInfo.originalTypeName, Dto::class)
-                // Copy annotations as desired
-                .copyAnnotationsByBasePackage(dtoInfo.originalTypeElement, dtoInfo.copyAnnotationPackages)
-        // Contract state parameter, used in alt constructor and util functions
-        val stateParameter = ParameterSpec.builder("original", dtoInfo.originalTypeName).build()
-        // Create DTO primary constructor
-        val dtoConstructorBuilder = FunSpec.constructorBuilder()
-        // Create DTO alternative constructor
-        val dtoAltConstructorBuilder = FunSpec.constructorBuilder().addParameter(stateParameter)
-                .addKdoc(CodeBlock.builder()
-                        .addStatement("Alternative constructor, used to map ")
-                        .addStatement("from the given [%T] instance.", dtoInfo.originalTypeName).build())
-        val dtoAltConstructorCodeBuilder = CodeBlock.builder().addStatement("")
-        // Create patch function
-        val patchFunctionBuilder = FunSpec.builder("toPatched")
-                .addModifiers(OVERRIDE)
-                .addKdoc(CodeBlock.builder()
-                        .addStatement("Create a patched copy of the given [%T] instance,", dtoInfo.originalTypeName)
-                        .addStatement("updated using this DTO's non-null properties.").build())
-                .addParameter(stateParameter)
-                .returns(dtoInfo.originalTypeName)
-        val patchFunctionCodeBuilder = CodeBlock.builder().addStatement("val patched = %T(", dtoInfo.originalTypeName)
-        // Create mapping function
-        val toStateFunctionBuilder = FunSpec.builder("toTargetType")
-                .addModifiers(OVERRIDE)
-                .addKdoc(CodeBlock.builder()
-                        .addStatement("Create an instance of [%T], using this DTO's properties.", dtoInfo.originalTypeName)
-                        .addStatement("May throw a [DtoInsufficientStateMappingException] ")
-                        .addStatement("if there is mot enough information to do so.").build())
-                .returns(dtoInfo.originalTypeName)
-        val toStateFunctionCodeBuilder = CodeBlock.builder()
-                .addStatement("try {")
-                .addStatement("   val originalTypeInstance = %T(", dtoInfo.originalTypeName)
-
-        dtoInfo.fields.forEachIndexed { index, variableElement ->
-            val commaOrEmpty = if (index + 1 < dtoInfo.fields.size) "," else ""
-            // Tell KotlinPoet that the property is initialized via the constructor parameter,
-            // by creating both a constructor param and member property
-            val propertyName = variableElement.simpleName.toString()
-            val propertyType = variableElement.asKotlinTypeName().copy(nullable = true)
-            val propertyDefaultValue = variableElement
-                    .findAnnotationValue(DefaultValue::class.java, "value")?.value?.toString() ?: "null"
-            dtoConstructorBuilder.addParameter(ParameterSpec.builder(propertyName, propertyType)
-                    .defaultValue(propertyDefaultValue)
-                    .build())
-
-            dtoTypeSpecBuilder.addProperty(PropertySpec.builder(propertyName, propertyType)
-                    .mutable()
-                    .addModifiers(PUBLIC)
-                    .initializer(propertyName)
-                    // Copy annotations as desired
-                    .copyAnnotationsByBasePackage(variableElement, dtoInfo.copyAnnotationPackages, FIELD).build())
-            // Add line to path function
-            patchFunctionCodeBuilder.addStatement("      $propertyName = this.$propertyName ?: original.$propertyName$commaOrEmpty")
-            // Add line to map function
-            val nullableOrNot = if (variableElement.isNullable()) "" else "!!"
-            toStateFunctionCodeBuilder.addStatement("      $propertyName = this.$propertyName$nullableOrNot$commaOrEmpty")
-            // Add line to alt constructor
-            dtoAltConstructorCodeBuilder.addStatement("      $propertyName = original.$propertyName$commaOrEmpty")
-        }
-
-        // Complete alt constructor
-        dtoAltConstructorBuilder.callThisConstructor(dtoAltConstructorCodeBuilder.build())
-        // Complete patch function
-        patchFunctionCodeBuilder.addStatement(")")
-        patchFunctionCodeBuilder.addStatement("return patched")
-        // Complete mappiong function
-
-        toStateFunctionCodeBuilder.addStatement("   )")
-        toStateFunctionCodeBuilder.addStatement("   return originalTypeInstance")
-        toStateFunctionCodeBuilder.addStatement("}")
-        toStateFunctionCodeBuilder.addStatement("catch(e: Exception) {")
-        toStateFunctionCodeBuilder.addStatement("   throw %T(exception = e)", DtoInsufficientMappingException::class)
-        toStateFunctionCodeBuilder.addStatement("}")
-
-        return dtoTypeSpecBuilder
-                .primaryConstructor(dtoConstructorBuilder.build())
-                .addFunction(dtoAltConstructorBuilder.build())
-                .addFunction(patchFunctionBuilder.addCode(patchFunctionCodeBuilder.build()).build())
-                .addFunction(toStateFunctionBuilder.addCode(toStateFunctionCodeBuilder.build()).build())
-    }
+     fun dtoSpec(dtoInfo: DtoTypeSpecBuilder): TypeSpec = dtoInfo.dtoStrategy.dtoTypeSpec()
 
     /**
      * Converts this element to a [TypeName], ensuring that Java types

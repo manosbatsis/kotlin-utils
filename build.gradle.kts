@@ -34,7 +34,7 @@ apply<IdeaPlugin>()
 
 allprojects {
     group = "com.github.manosbatsis.kotlin-utils"
-    version = "0.10"
+    version = "0.11"
     description = "Kotlin Utilities"
 
     repositories {
@@ -42,6 +42,9 @@ allprojects {
         jcenter()
         mavenCentral()
     }
+
+    // convenient report on all dependencies
+    task<DependencyReportTask>("allDeps") {}
 }
 
 subprojects {
@@ -59,7 +62,7 @@ subprojects {
         // Use the Kotlin test library.
         testImplementation("org.jetbrains.kotlin:kotlin-test:${Versions.kotlin}")
         // Use the Kotlin JUnit integration.
-        testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
+        testImplementation("org.jetbrains.kotlin:kotlin-test-junit:${Versions.kotlin}")
     }
 
     configure<NexusPublishExtension> {
