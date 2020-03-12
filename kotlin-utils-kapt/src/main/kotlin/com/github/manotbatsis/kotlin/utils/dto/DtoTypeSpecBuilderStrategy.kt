@@ -22,6 +22,7 @@ import javax.lang.model.element.VariableElement
 
 internal interface DtoTypeSpecBuilderStrategy : ProcessingEnvironmentAware {
 
+    companion object {}
     /** The [DtoTypeSpecBuilder] that created ths instance */
     val dtoTypeSpecBuilder: DtoTypeSpecBuilder
 
@@ -133,9 +134,9 @@ open class DefaultDtoTypeSpecBuilderStrategy(
         val toStateFunctionCodeBuilder = CodeBlock.builder()
                 .addStatement("try {")
                 .addStatement("   val originalTypeInstance = %T(", dtoTypeSpecBuilder.originalTypeName)
-
-        getFieldsToProcess().forEachIndexed { index, originalVariableelement ->
-            val commaOrEmpty = if (index + 1 < dtoTypeSpecBuilder.fields.size) "," else ""
+        val fieldsToProcess = getFieldsToProcess()
+        fieldsToProcess.forEachIndexed { index, originalVariableelement ->
+            val commaOrEmpty = if (index + 1 < fieldsToProcess.size) "," else ""
             // Tell KotlinPoet that the property is initialized via the constructor parameter,
             // by creating both a constructor param and member property
             val propertyName = originalVariableelement.simpleName.toString()
@@ -182,7 +183,9 @@ open class DefaultDtoTypeSpecBuilderStrategy(
                 .addFunction(toStateFunctionBuilder.addCode(toStateFunctionCodeBuilder.build()).build())
     }
 
-    override fun getFieldsToProcess(): List<VariableElement> = dtoTypeSpecBuilder.fields
+    override fun getFieldsToProcess(): List<VariableElement> =
+            if (dtoTypeSpecBuilder.fields.isNotEmpty()) dtoTypeSpecBuilder.fields
+            else dtoTypeSpecBuilder.originalTypeElement.accessibleConstructorParameterFields()
 
 
 }

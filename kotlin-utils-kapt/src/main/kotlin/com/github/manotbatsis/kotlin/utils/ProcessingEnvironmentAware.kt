@@ -12,21 +12,22 @@
  import com.squareup.kotlinpoet.TypeSpec
  import com.squareup.kotlinpoet.asClassName
  import com.squareup.kotlinpoet.asTypeName
-import org.jetbrains.annotations.NotNull
-import javax.annotation.processing.ProcessingEnvironment
-import javax.lang.model.element.AnnotationMirror
-import javax.lang.model.element.AnnotationValue
-import javax.lang.model.element.Element
-import javax.lang.model.element.Modifier
-import javax.lang.model.element.TypeElement
-import javax.lang.model.element.VariableElement
-import javax.lang.model.type.ArrayType
-import javax.lang.model.type.DeclaredType
-import javax.lang.model.type.PrimitiveType
-import javax.lang.model.type.TypeMirror
-import javax.lang.model.util.ElementFilter
-import javax.tools.Diagnostic.Kind.ERROR
-import javax.tools.Diagnostic.Kind.NOTE
+ import org.jetbrains.annotations.NotNull
+ import javax.annotation.processing.ProcessingEnvironment
+ import javax.lang.model.element.AnnotationMirror
+ import javax.lang.model.element.AnnotationValue
+ import javax.lang.model.element.Element
+ import javax.lang.model.element.ElementKind.FIELD
+ import javax.lang.model.element.Modifier
+ import javax.lang.model.element.TypeElement
+ import javax.lang.model.element.VariableElement
+ import javax.lang.model.type.ArrayType
+ import javax.lang.model.type.DeclaredType
+ import javax.lang.model.type.PrimitiveType
+ import javax.lang.model.type.TypeMirror
+ import javax.lang.model.util.ElementFilter
+ import javax.tools.Diagnostic.Kind.ERROR
+ import javax.tools.Diagnostic.Kind.NOTE
 
 
  /**
@@ -34,22 +35,47 @@ import javax.tools.Diagnostic.Kind.NOTE
  */
 interface ProcessingEnvironmentAware {
 
-    /** Override to implement [ProcessingEnvironment] access */
-    val processingEnvironment: ProcessingEnvironment
+     /** Override to implement [ProcessingEnvironment] access */
+     val processingEnvironment: ProcessingEnvironment
 
-    /** Returns all fields in this type that also appear as a constructor parameter. */
-    fun TypeElement.accessibleConstructorParameterFields(): List<VariableElement> {
-        val allMembers = processingEnvironment.elementUtils.getAllMembers(this)
-        val fields = ElementFilter.fieldsIn(allMembers).filterNot { it.kind.isClass || it.kind.isInterface }
-        val constructors = ElementFilter.constructorsIn(allMembers)
-        val constructorParamNames = constructors
-                .flatMap { it.parameters }
-                .filterNotNull()
-                .filterNot {
-                    it.modifiers.contains(Modifier.PRIVATE)
-                            || it.modifiers.contains(Modifier.PROTECTED)
-                }
-                .map { it.simpleName.toString() }
+     fun isKotlinClass(el: TypeElement) = el.annotationMirrors.any { it.annotationType.toString() == "kotlin.Metadata" }
+
+     /**
+      * https://stackoverflow.com/a/50975195/1309260
+      * Check for Java static or Kotlin singleton.
+      * An imperfect heuristic: if not static, checks for a static INSTANCE field.
+      */
+     fun isStatic(element: Element): Boolean {
+         if (element.modifiers.contains(Modifier.STATIC)) return true
+         else {
+             val parent = element.enclosingElement
+             if (parent is TypeElement && isKotlinClass(parent)) {
+                 val instances = parent.enclosedElements
+                         .filter { "INSTANCE" == it.simpleName.toString() }
+                         .filter { it.modifiers.contains(Modifier.STATIC) }
+                         .filter { it.kind.isField }
+                 return instances.isNotEmpty()
+             }
+             return false
+         }
+     }
+
+     fun List<VariableElement>.fieldsOnly() = this.filterNot { it.kind != FIELD || isStatic(it) }
+
+     /** Returns all fields in this type that also appear as a constructor parameter. */
+     fun TypeElement.accessibleConstructorParameterFields(): List<VariableElement> {
+         val allMembers = processingEnvironment.elementUtils.getAllMembers(this)
+         val fields = ElementFilter.fieldsIn(allMembers).fieldsOnly()
+
+         val constructors = ElementFilter.constructorsIn(allMembers)
+         val constructorParamNames = constructors
+                 .flatMap { it.parameters }
+                 .filterNotNull()
+                 .filterNot {
+                     it.modifiers.contains(Modifier.PRIVATE)
+                             || it.modifiers.contains(Modifier.PROTECTED)
+                 }
+                 .map { it.simpleName.toString() }
                 .toSet()
         return fields.filter { constructorParamNames.contains(it.simpleName.toString()) }
     }
