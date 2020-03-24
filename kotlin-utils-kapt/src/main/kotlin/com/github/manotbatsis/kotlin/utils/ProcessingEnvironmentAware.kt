@@ -13,6 +13,8 @@
  import com.squareup.kotlinpoet.asClassName
  import com.squareup.kotlinpoet.asTypeName
  import org.jetbrains.annotations.NotNull
+ import java.util.regex.Matcher
+ import java.util.regex.Pattern
  import javax.annotation.processing.ProcessingEnvironment
  import javax.lang.model.element.AnnotationMirror
  import javax.lang.model.element.AnnotationValue
@@ -34,6 +36,9 @@
  * Baee processor implementation.
  */
 interface ProcessingEnvironmentAware {
+     companion object {
+         val camelToUnderscorePattern = Pattern.compile("(?<=[a-z])[A-Z]")
+     }
 
      /** Override to implement [ProcessingEnvironment] access */
      val processingEnvironment: ProcessingEnvironment
@@ -302,30 +307,47 @@ interface ProcessingEnvironmentAware {
                     .mapNotNull { k -> elementValues[k] }
                     .firstOrNull()
 
-    /** Get the given annotation value as a list of [AnnotationValue] if it exists, null otherwise */
-    fun AnnotationMirror.findAnnotationValueList(memberName: String): List<AnnotationValue>? =
-            processingEnvironment.elementUtils.getElementValuesWithDefaults(this).entries
-                    .filter { it.key.simpleName.toString() == memberName }
-                    .mapNotNull { it.value.value }
-                    .firstOrNull() as List<AnnotationValue>?
+     /** Get the given annotation value as a list of [AnnotationValue] if it exists, null otherwise */
+     fun AnnotationMirror.findAnnotationValueList(memberName: String): List<AnnotationValue>? =
+             processingEnvironment.elementUtils.getElementValuesWithDefaults(this).entries
+                     .filter { it.key.simpleName.toString() == memberName }
+                     .mapNotNull { it.value.value }
+                     .firstOrNull() as List<AnnotationValue>?
 
-    /** Prints an error message using this element as a position hint. */
-    fun Element.errorMessage(message: () -> String) {
-        processingEnvironment.messager.printMessage(ERROR, message() + "\n", this)
-    }
+     /** Get the given annotation value as a `List<String>` of [AnnotationValue] if it exists, an empty list otherwise */
+     fun AnnotationMirror.findAnnotationValueStringsList(memberName: String): List<String> =
+             this.findAnnotationValueList(memberName)?.mapNotNull { it.value.toString() } ?: emptyList()
 
-    fun ProcessingEnvironment.errorMessage(message: () -> String) {
-        this.messager.printMessage(ERROR, message() + "\n")
-    }
 
-    fun ProcessingEnvironment.noteMessage(message: () -> String) {
-        this.messager.printMessage(NOTE, message()+"\n")
-    }
+     /** Prints an error message using this element as a position hint. */
+     fun Element.errorMessage(message: () -> String) {
+         processingEnvironment.messager.printMessage(ERROR, message() + "\n", this)
+     }
 
-    fun <T : Any> T.accessField(fieldName: String): Any? {
-        return this.javaClass.getDeclaredField(fieldName).let { field ->
-            field?.isAccessible = true
-            return@let field?.get(this)
-        }
-    }
-}
+     fun ProcessingEnvironment.errorMessage(message: () -> String) {
+         this.messager.printMessage(ERROR, message() + "\n")
+     }
+
+     fun ProcessingEnvironment.noteMessage(message: () -> String) {
+         this.messager.printMessage(NOTE, message() + "\n")
+     }
+
+     fun <T : Any> T.accessField(fieldName: String): Any? {
+         return this.javaClass.getDeclaredField(fieldName).let { field ->
+             field?.isAccessible = true
+             return@let field?.get(this)
+         }
+     }
+
+     fun String.camelToUnderscores(): String {
+         val m: Matcher = camelToUnderscorePattern.matcher(this.decapitalize())
+
+         val sb = StringBuffer()
+         while (m.find()) {
+             m.appendReplacement(sb, "_" + m.group().toLowerCase())
+         }
+         m.appendTail(sb)
+         return sb.toString()
+     }
+
+ }

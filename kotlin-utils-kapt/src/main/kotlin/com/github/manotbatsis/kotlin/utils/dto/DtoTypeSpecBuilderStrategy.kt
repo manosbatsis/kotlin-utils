@@ -20,9 +20,10 @@ import com.squareup.kotlinpoet.asClassName
 import javax.annotation.processing.ProcessingEnvironment
 import javax.lang.model.element.VariableElement
 
-internal interface DtoTypeSpecBuilderStrategy : ProcessingEnvironmentAware {
+interface DtoTypeSpecBuilderStrategy : ProcessingEnvironmentAware {
 
     companion object {}
+
     /** The [DtoTypeSpecBuilder] that created ths instance */
     val dtoTypeSpecBuilder: DtoTypeSpecBuilder
 

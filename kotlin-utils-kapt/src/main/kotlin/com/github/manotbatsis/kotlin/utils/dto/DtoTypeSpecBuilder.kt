@@ -12,7 +12,7 @@ data class DtoTypeSpecBuilder(
         val fields: List<VariableElement> = emptyList(),
         val targetPackage: String = originalTypeElement.asClassName().packageName,
         val copyAnnotationPackages: Iterable<String> = emptyList(),
-        private val dtoStrategyClass: Class<DefaultDtoTypeSpecBuilderStrategy> = DefaultDtoTypeSpecBuilderStrategy::class.java
+        private val dtoStrategyClass: Class<out DtoTypeSpecBuilderStrategy> = DefaultDtoTypeSpecBuilderStrategy::class.java
 ) {
     val originalTypeName by lazy { originalTypeElement.asType().asTypeName() }
     val dtoStrategy by lazy {
