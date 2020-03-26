@@ -10,7 +10,6 @@ data class DtoTypeSpecBuilder(
         val processingEnvironment: ProcessingEnvironment,
         val originalTypeElement: TypeElement,
         val fields: List<VariableElement> = emptyList(),
-        val targetPackage: String = originalTypeElement.asClassName().packageName,
         val copyAnnotationPackages: Iterable<String> = emptyList(),
         private val dtoStrategyClass: Class<out DtoTypeSpecBuilderStrategy> = DefaultDtoTypeSpecBuilderStrategy::class.java
 ) {
@@ -20,6 +19,8 @@ data class DtoTypeSpecBuilder(
                 .getConstructor(ProcessingEnvironment::class.java, DtoTypeSpecBuilder::class.java)
                 .newInstance(processingEnvironment, this)
     }
+
+    val targetPackage: String = dtoStrategy.mapPackageName(originalTypeElement.asClassName().packageName)
 
     fun build() = dtoStrategy.dtoTypeSpec()
     fun builder() = dtoStrategy.dtoTypeSpecBuilder()

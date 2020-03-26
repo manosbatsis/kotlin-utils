@@ -33,6 +33,9 @@ interface DtoTypeSpecBuilderStrategy : ProcessingEnvironmentAware {
      */
     fun dtoTypeSpecBuilder(): TypeSpec.Builder
 
+    /** Map input - output package name */
+    fun mapPackageName(original: String): String
+
     /**
      * Override to change how the [TypeSpec] is generated for this DTO,
      * when overriding other methods is not adequate
@@ -80,6 +83,8 @@ open class DefaultDtoTypeSpecBuilderStrategy(
         addMembers(dtoTypeSpecBuilder)
         return dtoTypeSpecBuilder
     }
+
+    override fun mapPackageName(original: String): String = "${original}.generated"
 
     override fun addAnnotations(typeSpecBuilder: Builder) {
         typeSpecBuilder.copyAnnotationsByBasePackage(dtoTypeSpecBuilder.originalTypeElement, dtoTypeSpecBuilder.copyAnnotationPackages)
