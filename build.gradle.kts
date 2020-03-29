@@ -34,7 +34,7 @@ apply<IdeaPlugin>()
 
 allprojects {
     group = "com.github.manosbatsis.kotlin-utils"
-    version = "0.14"
+    version = "0.15"
     description = "Kotlin Utilities"
 
     repositories {

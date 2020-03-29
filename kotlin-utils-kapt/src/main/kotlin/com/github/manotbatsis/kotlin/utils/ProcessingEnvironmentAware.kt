@@ -1,86 +1,86 @@
- package com.github.manosbatsis.kotlin.utils
+package com.github.manosbatsis.kotlin.utils
 
- import com.github.manotbatsis.kotlin.utils.dto.DtoTypeSpecBuilder
- import com.squareup.kotlinpoet.AnnotationSpec
- import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget
- import com.squareup.kotlinpoet.ClassName
- import com.squareup.kotlinpoet.FunSpec
- import com.squareup.kotlinpoet.ParameterSpec
- import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
- import com.squareup.kotlinpoet.PropertySpec
- import com.squareup.kotlinpoet.TypeName
- import com.squareup.kotlinpoet.TypeSpec
- import com.squareup.kotlinpoet.asClassName
- import com.squareup.kotlinpoet.asTypeName
- import org.jetbrains.annotations.NotNull
- import java.util.regex.Matcher
- import java.util.regex.Pattern
- import javax.annotation.processing.ProcessingEnvironment
- import javax.lang.model.element.AnnotationMirror
- import javax.lang.model.element.AnnotationValue
- import javax.lang.model.element.Element
- import javax.lang.model.element.ElementKind.FIELD
- import javax.lang.model.element.Modifier
- import javax.lang.model.element.TypeElement
- import javax.lang.model.element.VariableElement
- import javax.lang.model.type.ArrayType
- import javax.lang.model.type.DeclaredType
- import javax.lang.model.type.PrimitiveType
- import javax.lang.model.type.TypeMirror
- import javax.lang.model.util.ElementFilter
- import javax.tools.Diagnostic.Kind.ERROR
- import javax.tools.Diagnostic.Kind.NOTE
+import com.github.manotbatsis.kotlin.utils.dto.DtoTypeSpecBuilder
+import com.squareup.kotlinpoet.AnnotationSpec
+import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget
+import com.squareup.kotlinpoet.ClassName
+import com.squareup.kotlinpoet.FunSpec
+import com.squareup.kotlinpoet.ParameterSpec
+import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.TypeName
+import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.kotlinpoet.asClassName
+import com.squareup.kotlinpoet.asTypeName
+import org.jetbrains.annotations.NotNull
+import java.util.regex.Matcher
+import java.util.regex.Pattern
+import javax.annotation.processing.ProcessingEnvironment
+import javax.lang.model.element.AnnotationMirror
+import javax.lang.model.element.AnnotationValue
+import javax.lang.model.element.Element
+import javax.lang.model.element.ElementKind.FIELD
+import javax.lang.model.element.Modifier
+import javax.lang.model.element.TypeElement
+import javax.lang.model.element.VariableElement
+import javax.lang.model.type.ArrayType
+import javax.lang.model.type.DeclaredType
+import javax.lang.model.type.PrimitiveType
+import javax.lang.model.type.TypeMirror
+import javax.lang.model.util.ElementFilter
+import javax.tools.Diagnostic.Kind.ERROR
+import javax.tools.Diagnostic.Kind.NOTE
 
 
- /**
+/**
  * Baee processor implementation.
  */
 interface ProcessingEnvironmentAware {
-     companion object {
-         val camelToUnderscorePattern = Pattern.compile("(?<=[a-z])[A-Z]")
-     }
+    companion object {
+        val camelToUnderscorePattern = Pattern.compile("(?<=[a-z])[A-Z]")
+    }
 
-     /** Override to implement [ProcessingEnvironment] access */
-     val processingEnvironment: ProcessingEnvironment
+    /** Override to implement [ProcessingEnvironment] access */
+    val processingEnvironment: ProcessingEnvironment
 
-     fun isKotlinClass(el: TypeElement) = el.annotationMirrors.any { it.annotationType.toString() == "kotlin.Metadata" }
+    fun isKotlinClass(el: TypeElement) = el.annotationMirrors.any { it.annotationType.toString() == "kotlin.Metadata" }
 
-     /**
-      * https://stackoverflow.com/a/50975195/1309260
-      * Check for Java static or Kotlin singleton.
-      * An imperfect heuristic: if not static, checks for a static INSTANCE field.
-      */
-     fun isStatic(element: Element): Boolean {
-         if (element.modifiers.contains(Modifier.STATIC)) return true
-         else {
-             val parent = element.enclosingElement
-             if (parent is TypeElement && isKotlinClass(parent)) {
-                 val instances = parent.enclosedElements
-                         .filter { "INSTANCE" == it.simpleName.toString() }
-                         .filter { it.modifiers.contains(Modifier.STATIC) }
-                         .filter { it.kind.isField }
-                 return instances.isNotEmpty()
-             }
-             return false
-         }
-     }
+    /**
+     * https://stackoverflow.com/a/50975195/1309260
+     * Check for Java static or Kotlin singleton.
+     * An imperfect heuristic: if not static, checks for a static INSTANCE field.
+     */
+    fun isStatic(element: Element): Boolean {
+        if (element.modifiers.contains(Modifier.STATIC)) return true
+        else {
+            val parent = element.enclosingElement
+            if (parent is TypeElement && isKotlinClass(parent)) {
+                val instances = parent.enclosedElements
+                        .filter { "INSTANCE" == it.simpleName.toString() }
+                        .filter { it.modifiers.contains(Modifier.STATIC) }
+                        .filter { it.kind.isField }
+                return instances.isNotEmpty()
+            }
+            return false
+        }
+    }
 
-     fun List<VariableElement>.fieldsOnly() = this.filterNot { it.kind != FIELD || isStatic(it) }
+    fun List<VariableElement>.fieldsOnly() = this.filterNot { it.kind != FIELD || isStatic(it) }
 
-     /** Returns all fields in this type that also appear as a constructor parameter. */
-     fun TypeElement.accessibleConstructorParameterFields(): List<VariableElement> {
-         val allMembers = processingEnvironment.elementUtils.getAllMembers(this)
-         val fields = ElementFilter.fieldsIn(allMembers).fieldsOnly()
+    /** Returns all fields in this type that also appear as a constructor parameter. */
+    fun TypeElement.accessibleConstructorParameterFields(): List<VariableElement> {
+        val allMembers = processingEnvironment.elementUtils.getAllMembers(this)
+        val fields = ElementFilter.fieldsIn(allMembers).fieldsOnly()
 
-         val constructors = ElementFilter.constructorsIn(allMembers)
-         val constructorParamNames = constructors
-                 .flatMap { it.parameters }
-                 .filterNotNull()
-                 .filterNot {
-                     it.modifiers.contains(Modifier.PRIVATE)
-                             || it.modifiers.contains(Modifier.PROTECTED)
-                 }
-                 .map { it.simpleName.toString() }
+        val constructors = ElementFilter.constructorsIn(allMembers)
+        val constructorParamNames = constructors
+                .flatMap { it.parameters }
+                .filterNotNull()
+                .filterNot {
+                    it.modifiers.contains(Modifier.PRIVATE)
+                            || it.modifiers.contains(Modifier.PROTECTED)
+                }
+                .map { it.simpleName.toString() }
                 .toSet()
         return fields.filter { constructorParamNames.contains(it.simpleName.toString()) }
     }
@@ -92,53 +92,53 @@ interface ProcessingEnvironmentAware {
         return false
     }
 
-     fun filterAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>): List<AnnotationMirror> {
-         return source.annotationMirrors.filter { annotationMirror ->
-             val annotationPackage = annotationMirror.annotationType.asTypeElement().getPackageName()
-             val match = basePackages.hasBasePackageOf(annotationPackage)
-             match
-         }
-     }
+    fun filterAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>): List<AnnotationMirror> {
+        return source.annotationMirrors.filter { annotationMirror ->
+            val annotationPackage = annotationMirror.annotationType.asTypeElement().getPackageName()
+            val match = basePackages.hasBasePackageOf(annotationPackage)
+            match
+        }
+    }
 
-     /** A constructor property parameter */
-     class ConstructorProperty(val propertySpec: PropertySpec, val defaultValue: String? = null)
+    /** A constructor property parameter */
+    class ConstructorProperty(val propertySpec: PropertySpec, val defaultValue: String? = null)
 
-     /** Create a constructor with property parameters */
-     fun TypeSpec.Builder.primaryConstructor(vararg properties: PropertySpec): TypeSpec.Builder =
-             this.primaryConstructor(*properties.map { ConstructorProperty(it) }.toTypedArray())
+    /** Create a constructor with property parameters */
+    fun TypeSpec.Builder.primaryConstructor(vararg properties: PropertySpec): TypeSpec.Builder =
+            this.primaryConstructor(*properties.map { ConstructorProperty(it) }.toTypedArray())
 
-     /** Create a constructor with property parameters */
-     fun TypeSpec.Builder.primaryConstructor(vararg properties: ConstructorProperty): TypeSpec.Builder {
-         val propertySpecs = properties.map { it.propertySpec.toBuilder().initializer(it.propertySpec.name).build() }
-         val parameters = properties.map {
-             val paramSpec = ParameterSpec.builder(it.propertySpec.name, it.propertySpec.type)
-             if (it.defaultValue != null) paramSpec.defaultValue(it.defaultValue)
-             paramSpec.build()
-         }
-         val constructor = FunSpec.constructorBuilder()
-                 .addParameters(parameters)
-                 .build()
+    /** Create a constructor with property parameters */
+    fun TypeSpec.Builder.primaryConstructor(vararg properties: ConstructorProperty): TypeSpec.Builder {
+        val propertySpecs = properties.map { it.propertySpec.toBuilder().initializer(it.propertySpec.name).build() }
+        val parameters = properties.map {
+            val paramSpec = ParameterSpec.builder(it.propertySpec.name, it.propertySpec.type)
+            if (it.defaultValue != null) paramSpec.defaultValue(it.defaultValue)
+            paramSpec.build()
+        }
+        val constructor = FunSpec.constructorBuilder()
+                .addParameters(parameters)
+                .build()
 
-         return this
-                 .primaryConstructor(constructor)
-                 .addProperties(propertySpecs)
-     }
+        return this
+                .primaryConstructor(constructor)
+                .addProperties(propertySpecs)
+    }
 
-     fun TypeSpec.Builder.copyAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>): TypeSpec.Builder {
-         filterAnnotationsByBasePackage(source, basePackages).forEach {
-             this.addAnnotation(AnnotationSpec.get(it))
-         }
-         return this
-     }
+    fun TypeSpec.Builder.copyAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>): TypeSpec.Builder {
+        filterAnnotationsByBasePackage(source, basePackages).forEach {
+            this.addAnnotation(AnnotationSpec.get(it))
+        }
+        return this
+    }
 
-     fun PropertySpec.Builder.copyAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>, siteTarget: UseSiteTarget? = null): PropertySpec.Builder {
-         filterAnnotationsByBasePackage(source, basePackages).forEach {
+    fun PropertySpec.Builder.copyAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>, siteTarget: UseSiteTarget? = null): PropertySpec.Builder {
+        filterAnnotationsByBasePackage(source, basePackages).forEach {
             this.addAnnotation(AnnotationSpec.get(it).toBuilder().useSiteTarget(siteTarget).build())
         }
         return this
     }
 
-     fun dtoSpec(dtoInfo: DtoTypeSpecBuilder): TypeSpec = dtoInfo.dtoStrategy.dtoTypeSpec()
+    fun dtoSpec(dtoInfo: DtoTypeSpecBuilder): TypeSpec = dtoInfo.dtoStrategy.dtoTypeSpec()
 
     /**
      * Converts this element to a [TypeName], ensuring that Java types
@@ -175,7 +175,10 @@ interface ProcessingEnvironmentAware {
         }
     }
 
-    /** Converts this element to a [ClassName], ensuring that java types such as [java.lang.String] are converted to their Kotlin equivalent. */
+    /**
+     * Converts this element to a [ClassName], ensuring that java types such as [java.lang.String]
+     * are converted to their Kotlin equivalent.
+     */
     fun TypeElement.asKotlinClassName(): ClassName {
         val className = asClassName()
         return try {
@@ -187,13 +190,37 @@ interface ProcessingEnvironmentAware {
         }
     }
 
-    /** Returns the [TypeElement] represented by this [TypeMirror]. */
-    fun TypeMirror.asTypeElement(): TypeElement = processingEnvironment.typeUtils.asElement(this) as TypeElement
+    /**
+     * Returns true if this element is a subtype of the [targetType], false otherwise.
+     * Note that any type is a sub-type of itself.
+     * @param erasure whether to use the raw VS the generic [targetType]
+     */
+    fun TypeElement.isSunTypeOf(targetType: Class<*>, erasure: Boolean = false): Boolean {
+        val targetTypeMirror: TypeMirror = processingEnvironment.elementUtils.getTypeElement(targetType.canonicalName).asType()
+        return processingEnvironment.typeUtils.isSubtype(
+                this.asType(),
+                if (erasure) processingEnvironment.typeUtils.erasure(targetTypeMirror) else targetTypeMirror)
+    }
 
-    /** Returns true if this element is assignable to the given class, false othjerwise */
-    fun Element.isAssignableTo(superType: Class<*>): Boolean {
-        val superTypeMirror: TypeMirror = processingEnvironment.elementUtils.getTypeElement(superType.canonicalName).asType()
-        return processingEnvironment.typeUtils.isAssignable(this.asType(), superTypeMirror)
+    /**
+     * Returns true if this element is assignable to the the [targetType], false otherwise.
+     * @param erasure whether to use the raw VS the generic [targetType]
+     */
+    fun TypeElement.isAssignableTo(targetType: Class<*>, erasure: Boolean = false): Boolean {
+        val targetTypeMirror: TypeMirror = processingEnvironment.elementUtils.getTypeElement(targetType.canonicalName).asType()
+        return processingEnvironment.typeUtils.isAssignable(
+                this.asType(),
+                if (erasure) processingEnvironment.typeUtils.erasure(targetTypeMirror) else targetTypeMirror)
+    }
+
+    /** Returns the [TypeElement] represented by this [TypeMirror]. */
+    fun TypeMirror.asTypeElement(): TypeElement {
+        return if (this is PrimitiveType) {
+            val typeName = processingEnvironment.typeUtils.boxedClass(this)
+            processingEnvironment.noteMessage { "\nTypeMirror.asTypeElement3: ${typeName}" }
+            //ClassName.bestGuess("${asKotlinTypeName}")
+            processingEnvironment.elementUtils.getTypeElement("${typeName}")
+        } else processingEnvironment.typeUtils.asElement(this) as TypeElement
     }
 
     /** Returns true as long as this [Element] is not a [PrimitiveType] and does not have the [NotNull] core. */
@@ -307,47 +334,47 @@ interface ProcessingEnvironmentAware {
                     .mapNotNull { k -> elementValues[k] }
                     .firstOrNull()
 
-     /** Get the given annotation value as a list of [AnnotationValue] if it exists, null otherwise */
-     fun AnnotationMirror.findAnnotationValueList(memberName: String): List<AnnotationValue>? =
-             processingEnvironment.elementUtils.getElementValuesWithDefaults(this).entries
-                     .filter { it.key.simpleName.toString() == memberName }
-                     .mapNotNull { it.value.value }
-                     .firstOrNull() as List<AnnotationValue>?
+    /** Get the given annotation value as a list of [AnnotationValue] if it exists, null otherwise */
+    fun AnnotationMirror.findAnnotationValueList(memberName: String): List<AnnotationValue>? =
+            processingEnvironment.elementUtils.getElementValuesWithDefaults(this).entries
+                    .filter { it.key.simpleName.toString() == memberName }
+                    .mapNotNull { it.value.value }
+                    .firstOrNull() as List<AnnotationValue>?
 
-     /** Get the given annotation value as a `List<String>` of [AnnotationValue] if it exists, an empty list otherwise */
-     fun AnnotationMirror.findAnnotationValueStringsList(memberName: String): List<String> =
-             this.findAnnotationValueList(memberName)?.mapNotNull { it.value.toString() } ?: emptyList()
+    /** Get the given annotation value as a `List<String>` of [AnnotationValue] if it exists, an empty list otherwise */
+    fun AnnotationMirror.findAnnotationValueStringsList(memberName: String): List<String> =
+            this.findAnnotationValueList(memberName)?.mapNotNull { it.value.toString() } ?: emptyList()
 
 
-     /** Prints an error message using this element as a position hint. */
-     fun Element.errorMessage(message: () -> String) {
-         processingEnvironment.messager.printMessage(ERROR, message() + "\n", this)
-     }
+    /** Prints an error message using this element as a position hint. */
+    fun Element.errorMessage(message: () -> String) {
+        processingEnvironment.messager.printMessage(ERROR, message() + "\n", this)
+    }
 
-     fun ProcessingEnvironment.errorMessage(message: () -> String) {
-         this.messager.printMessage(ERROR, message() + "\n")
-     }
+    fun ProcessingEnvironment.errorMessage(message: () -> String) {
+        this.messager.printMessage(ERROR, message() + "\n")
+    }
 
-     fun ProcessingEnvironment.noteMessage(message: () -> String) {
-         this.messager.printMessage(NOTE, message() + "\n")
-     }
+    fun ProcessingEnvironment.noteMessage(message: () -> String) {
+        this.messager.printMessage(NOTE, message() + "\n")
+    }
 
-     fun <T : Any> T.accessField(fieldName: String): Any? {
-         return this.javaClass.getDeclaredField(fieldName).let { field ->
-             field?.isAccessible = true
-             return@let field?.get(this)
-         }
-     }
+    fun <T : Any> T.accessField(fieldName: String): Any? {
+        return this.javaClass.getDeclaredField(fieldName).let { field ->
+            field?.isAccessible = true
+            return@let field?.get(this)
+        }
+    }
 
-     fun String.camelToUnderscores(): String {
-         val m: Matcher = camelToUnderscorePattern.matcher(this.decapitalize())
+    fun String.camelToUnderscores(): String {
+        val m: Matcher = camelToUnderscorePattern.matcher(this.decapitalize())
 
-         val sb = StringBuffer()
-         while (m.find()) {
-             m.appendReplacement(sb, "_" + m.group().toLowerCase())
-         }
-         m.appendTail(sb)
-         return sb.toString()
-     }
+        val sb = StringBuffer()
+        while (m.find()) {
+            m.appendReplacement(sb, "_" + m.group().toLowerCase())
+        }
+        m.appendTail(sb)
+        return sb.toString()
+    }
 
- }
+}
