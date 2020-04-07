@@ -16,6 +16,7 @@ import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeSpec.Builder
+import com.squareup.kotlinpoet.TypeVariableName
 import com.squareup.kotlinpoet.asClassName
 import javax.annotation.processing.ProcessingEnvironment
 import javax.lang.model.element.VariableElement
@@ -81,6 +82,10 @@ open class DefaultDtoTypeSpecBuilderStrategy(
         addKdoc(dtoTypeSpecBuilder)
         addAnnotations(dtoTypeSpecBuilder)
         addMembers(dtoTypeSpecBuilder)
+        this.dtoTypeSpecBuilder.originalTypeElement.typeParameters.forEach {
+            dtoTypeSpecBuilder.addTypeVariable(TypeVariableName.invoke(it.simpleName.toString(), *it.bounds.map { it.asKotlinTypeName() }.toTypedArray()))
+        }
+
         return dtoTypeSpecBuilder
     }
 

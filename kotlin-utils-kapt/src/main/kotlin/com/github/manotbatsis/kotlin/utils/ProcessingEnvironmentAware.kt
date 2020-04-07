@@ -165,7 +165,7 @@ interface ProcessingEnvironmentAware {
             }
             is DeclaredType -> {
                 val typeName = this.asTypeElement().asKotlinClassName()
-                return if (!this.typeArguments.isEmpty())
+                return if (this.typeArguments.isNotEmpty())
                     typeName.parameterizedBy(*typeArguments
                             .mapNotNull { it.asKotlinTypeName() }
                             .toTypedArray())
@@ -217,8 +217,6 @@ interface ProcessingEnvironmentAware {
     fun TypeMirror.asTypeElement(): TypeElement {
         return if (this is PrimitiveType) {
             val typeName = processingEnvironment.typeUtils.boxedClass(this)
-            processingEnvironment.noteMessage { "\nTypeMirror.asTypeElement3: ${typeName}" }
-            //ClassName.bestGuess("${asKotlinTypeName}")
             processingEnvironment.elementUtils.getTypeElement("${typeName}")
         } else processingEnvironment.typeUtils.asElement(this) as TypeElement
     }
