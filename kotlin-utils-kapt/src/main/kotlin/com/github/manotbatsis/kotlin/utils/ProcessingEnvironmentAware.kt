@@ -1,6 +1,6 @@
 package com.github.manosbatsis.kotlin.utils
 
-import com.github.manotbatsis.kotlin.utils.dto.DtoTypeSpecBuilder
+import com.github.manotbatsis.kotlin.utils.dto.DtoTypeSpecBuilderContext
 import com.squareup.kotlinpoet.AnnotationSpec
 import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget
 import com.squareup.kotlinpoet.ClassName
@@ -138,7 +138,7 @@ interface ProcessingEnvironmentAware {
         return this
     }
 
-    fun dtoSpec(dtoInfo: DtoTypeSpecBuilder): TypeSpec = dtoInfo.dtoStrategy.dtoTypeSpec()
+    fun dtoSpec(dtoTypeSpecBuilderContext: DtoTypeSpecBuilderContext): TypeSpec = dtoTypeSpecBuilderContext.dtoStrategy.dtoTypeSpec()
 
     /**
      * Converts this element to a [TypeName], ensuring that Java types

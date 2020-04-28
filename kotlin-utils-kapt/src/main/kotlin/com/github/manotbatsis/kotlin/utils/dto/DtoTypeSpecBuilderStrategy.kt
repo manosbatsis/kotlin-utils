@@ -25,8 +25,8 @@ interface DtoTypeSpecBuilderStrategy : ProcessingEnvironmentAware {
 
     companion object {}
 
-    /** The [DtoTypeSpecBuilder] that created ths instance */
-    val dtoTypeSpecBuilder: DtoTypeSpecBuilder
+    /** The [DtoTypeSpecBuilderContext] that created ths instance */
+    val dtoTypeSpecBuilderContext: DtoTypeSpecBuilderContext
 
     /**
      * Override to change how the [TypeSpec.Builder] is generated for this DTO,
@@ -70,7 +70,7 @@ interface DtoTypeSpecBuilderStrategy : ProcessingEnvironmentAware {
 
 open class DefaultDtoTypeSpecBuilderStrategy(
         override val processingEnvironment: ProcessingEnvironment,
-        override val dtoTypeSpecBuilder: DtoTypeSpecBuilder
+        override val dtoTypeSpecBuilderContext: DtoTypeSpecBuilderContext
 ) : DtoTypeSpecBuilderStrategy {
 
     override fun dtoTypeSpec(): TypeSpec = dtoTypeSpecBuilder().build()
@@ -82,7 +82,7 @@ open class DefaultDtoTypeSpecBuilderStrategy(
         addKdoc(dtoTypeSpecBuilder)
         addAnnotations(dtoTypeSpecBuilder)
         addMembers(dtoTypeSpecBuilder)
-        this.dtoTypeSpecBuilder.originalTypeElement.typeParameters.forEach {
+        this.dtoTypeSpecBuilderContext.originalTypeElement.typeParameters.forEach {
             dtoTypeSpecBuilder.addTypeVariable(TypeVariableName.invoke(it.simpleName.toString(), *it.bounds.map { it.asKotlinTypeName() }.toTypedArray()))
         }
 
@@ -92,15 +92,15 @@ open class DefaultDtoTypeSpecBuilderStrategy(
     override fun mapPackageName(original: String): String = "${original}.generated"
 
     override fun addAnnotations(typeSpecBuilder: Builder) {
-        typeSpecBuilder.copyAnnotationsByBasePackage(dtoTypeSpecBuilder.originalTypeElement, dtoTypeSpecBuilder.copyAnnotationPackages)
+        typeSpecBuilder.copyAnnotationsByBasePackage(dtoTypeSpecBuilderContext.originalTypeElement, dtoTypeSpecBuilderContext.copyAnnotationPackages)
     }
 
     override fun addPropertyAnnotations(propertySpecBuilder: PropertySpec.Builder, variableElement: VariableElement) {
-        propertySpecBuilder.copyAnnotationsByBasePackage(variableElement, dtoTypeSpecBuilder.copyAnnotationPackages, FIELD)
+        propertySpecBuilder.copyAnnotationsByBasePackage(variableElement, dtoTypeSpecBuilderContext.copyAnnotationPackages, FIELD)
     }
 
     override fun addKdoc(typeSpecBuilder: Builder) {
-        typeSpecBuilder.addKdoc("A [%T]-specific [%T] implementation", dtoTypeSpecBuilder.originalTypeName, Dto::class)
+        typeSpecBuilder.addKdoc("A [%T]-specific [%T] implementation", dtoTypeSpecBuilderContext.originalTypeName, Dto::class)
     }
 
     override fun addModifiers(typeSpecBuilder: Builder) {
@@ -108,43 +108,43 @@ open class DefaultDtoTypeSpecBuilderStrategy(
     }
 
     override fun addSuperTypes(typeSpecBuilder: Builder) {
-        typeSpecBuilder.addSuperinterface(Dto::class.asClassName().parameterizedBy(dtoTypeSpecBuilder.originalTypeName))
+        typeSpecBuilder.addSuperinterface(Dto::class.asClassName().parameterizedBy(dtoTypeSpecBuilderContext.originalTypeName))
     }
 
     override fun getClassName(): ClassName =
-            ClassName(dtoTypeSpecBuilder.targetPackage, "${dtoTypeSpecBuilder.originalTypeElement.simpleName}Dto")
+            ClassName(dtoTypeSpecBuilderContext.targetPackage, "${dtoTypeSpecBuilderContext.originalTypeElement.simpleName}Dto")
 
     override fun addMembers(typeSpecBuilder: Builder) {
         // Original type parameter, used in alt constructor and util functions
-        val originalTypeParameter = ParameterSpec.builder("original", dtoTypeSpecBuilder.originalTypeName).build()
+        val originalTypeParameter = ParameterSpec.builder("original", dtoTypeSpecBuilderContext.originalTypeName).build()
         // Create DTO primary constructor
         val dtoConstructorBuilder = FunSpec.constructorBuilder()
         // Create DTO alternative constructor
         val dtoAltConstructorBuilder = FunSpec.constructorBuilder().addParameter(originalTypeParameter)
                 .addKdoc(CodeBlock.builder()
                         .addStatement("Alternative constructor, used to map ")
-                        .addStatement("from the given [%T] instance.", dtoTypeSpecBuilder.originalTypeName).build())
+                        .addStatement("from the given [%T] instance.", dtoTypeSpecBuilderContext.originalTypeName).build())
         val dtoAltConstructorCodeBuilder = CodeBlock.builder().addStatement("")
         // Create patch function
         val patchFunctionBuilder = FunSpec.builder("toPatched")
                 .addModifiers(OVERRIDE)
                 .addKdoc(CodeBlock.builder()
-                        .addStatement("Create a patched copy of the given [%T] instance,", dtoTypeSpecBuilder.originalTypeName)
+                        .addStatement("Create a patched copy of the given [%T] instance,", dtoTypeSpecBuilderContext.originalTypeName)
                         .addStatement("updated using this DTO's non-null properties.").build())
                 .addParameter(originalTypeParameter)
-                .returns(dtoTypeSpecBuilder.originalTypeName)
-        val patchFunctionCodeBuilder = CodeBlock.builder().addStatement("val patched = %T(", dtoTypeSpecBuilder.originalTypeName)
+                .returns(dtoTypeSpecBuilderContext.originalTypeName)
+        val patchFunctionCodeBuilder = CodeBlock.builder().addStatement("val patched = %T(", dtoTypeSpecBuilderContext.originalTypeName)
         // Create mapping function
         val toStateFunctionBuilder = FunSpec.builder("toTargetType")
                 .addModifiers(OVERRIDE)
                 .addKdoc(CodeBlock.builder()
-                        .addStatement("Create an instance of [%T], using this DTO's properties.", dtoTypeSpecBuilder.originalTypeName)
+                        .addStatement("Create an instance of [%T], using this DTO's properties.", dtoTypeSpecBuilderContext.originalTypeName)
                         .addStatement("May throw a [DtoInsufficientStateMappingException] ")
                         .addStatement("if there is mot enough information to do so.").build())
-                .returns(dtoTypeSpecBuilder.originalTypeName)
+                .returns(dtoTypeSpecBuilderContext.originalTypeName)
         val toStateFunctionCodeBuilder = CodeBlock.builder()
                 .addStatement("try {")
-                .addStatement("   val originalTypeInstance = %T(", dtoTypeSpecBuilder.originalTypeName)
+                .addStatement("   val originalTypeInstance = %T(", dtoTypeSpecBuilderContext.originalTypeName)
         val fieldsToProcess = getFieldsToProcess()
         fieldsToProcess.forEachIndexed { index, originalVariableelement ->
             val commaOrEmpty = if (index + 1 < fieldsToProcess.size) "," else ""
@@ -195,8 +195,8 @@ open class DefaultDtoTypeSpecBuilderStrategy(
     }
 
     override fun getFieldsToProcess(): List<VariableElement> =
-            if (dtoTypeSpecBuilder.fields.isNotEmpty()) dtoTypeSpecBuilder.fields
-            else dtoTypeSpecBuilder.originalTypeElement.accessibleConstructorParameterFields()
+            if (dtoTypeSpecBuilderContext.fields.isNotEmpty()) dtoTypeSpecBuilderContext.fields
+            else dtoTypeSpecBuilderContext.originalTypeElement.accessibleConstructorParameterFields()
 
 
 }

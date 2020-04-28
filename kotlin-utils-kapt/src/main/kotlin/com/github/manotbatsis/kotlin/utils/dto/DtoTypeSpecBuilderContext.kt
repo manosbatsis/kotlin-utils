@@ -6,7 +6,7 @@ import javax.annotation.processing.ProcessingEnvironment
 import javax.lang.model.element.TypeElement
 import javax.lang.model.element.VariableElement
 
-data class DtoTypeSpecBuilder(
+data class DtoTypeSpecBuilderContext(
         val processingEnvironment: ProcessingEnvironment,
         val originalTypeElement: TypeElement,
         val fields: List<VariableElement> = emptyList(),
@@ -16,7 +16,7 @@ data class DtoTypeSpecBuilder(
     val originalTypeName by lazy { originalTypeElement.asType().asTypeName() }
     val dtoStrategy by lazy {
         dtoStrategyClass
-                .getConstructor(ProcessingEnvironment::class.java, DtoTypeSpecBuilder::class.java)
+                .getConstructor(ProcessingEnvironment::class.java, DtoTypeSpecBuilderContext::class.java)
                 .newInstance(processingEnvironment, this)
     }
 
