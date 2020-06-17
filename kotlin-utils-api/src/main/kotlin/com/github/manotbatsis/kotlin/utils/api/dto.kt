@@ -1,4 +1,4 @@
-package com.github.manosbatsis.kotlin.utils.api
+package com.github.manotbatsis.kotlin.utils.api
 
 /** Occurs when a DTO has insufficient information for mapping to a data class */
 class DtoInsufficientMappingException(

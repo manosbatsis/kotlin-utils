@@ -1,9 +1,11 @@
 package com.github.manosbatsis.kotlin.utils
 
-import com.github.manotbatsis.kotlin.utils.dto.DtoTypeSpecBuilderContext
+import com.github.manotbatsis.kotlin.utils.kapt.dto.DtoInputContext
+import com.github.manotbatsis.kotlin.utils.kapt.dto.strategy.DtoMembersStrategy.Statement
 import com.squareup.kotlinpoet.AnnotationSpec
 import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget
 import com.squareup.kotlinpoet.ClassName
+import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
@@ -138,7 +140,8 @@ interface ProcessingEnvironmentAware {
         return this
     }
 
-    fun dtoSpec(dtoTypeSpecBuilderContext: DtoTypeSpecBuilderContext): TypeSpec = dtoTypeSpecBuilderContext.dtoStrategy.dtoTypeSpec()
+    fun dtoSpec(dtoInputContext: DtoInputContext): TypeSpec =
+            dtoInputContext.dtoStrategy.dtoTypeSpec()
 
     /**
      * Converts this element to a [TypeName], ensuring that Java types
@@ -364,6 +367,11 @@ interface ProcessingEnvironmentAware {
         }
     }
 
+    fun CodeBlock.Builder.addStatement(statement: Statement?): CodeBlock.Builder {
+        if (statement != null) addStatement(statement.format, *statement.args)
+        return this
+    }
+
     fun String.camelToUnderscores(): String {
         val m: Matcher = camelToUnderscorePattern.matcher(this.decapitalize())
 
@@ -373,6 +381,12 @@ interface ProcessingEnvironmentAware {
         }
         m.appendTail(sb)
         return sb.toString()
+    }
+
+
+    fun getStringValuesList(annotationMirror: AnnotationMirror?, memberName: String): List<String> {
+        return if (annotationMirror == null) emptyList()
+        else annotationMirror.findAnnotationValueList(memberName)?.mapNotNull { it.value.toString() } ?: emptyList()
     }
 
 }
