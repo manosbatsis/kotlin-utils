@@ -6,15 +6,10 @@ import com.github.manotbatsis.kotlin.utils.api.DtoInsufficientMappingException
 import com.github.manotbatsis.kotlin.utils.kapt.dto.DtoInputContext
 import com.github.manotbatsis.kotlin.utils.kapt.dto.DtoInputContextAware
 import com.github.manotbatsis.kotlin.utils.kapt.dto.strategy.DtoMembersStrategy.Statement
+import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget.FIELD
-import com.squareup.kotlinpoet.CodeBlock
-import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier.OVERRIDE
 import com.squareup.kotlinpoet.KModifier.PUBLIC
-import com.squareup.kotlinpoet.ParameterSpec
-import com.squareup.kotlinpoet.PropertySpec
-import com.squareup.kotlinpoet.TypeName
-import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeSpec.Builder
 import javax.annotation.processing.ProcessingEnvironment
 import javax.lang.model.element.VariableElement
@@ -41,7 +36,9 @@ interface DtoMembersStrategy : DtoInputContextAware {
     fun toDefaultValueExpression(variableElement: VariableElement): String
     fun toMapStatement(variableElement: VariableElement, commaOrEmpty: String): Statement?
     fun toPatchStatement(variableElement: VariableElement, commaOrEmpty: String): Statement?
-    fun toAltConstructorStatement(variableElement: VariableElement, commaOrEmpty: String): Statement?
+    fun toAltConstructorStatement(index: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String): Statement?
+    fun toPropertySpecBuilder(index: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName): PropertySpec.Builder
+    fun fieldProcessed(index: Int, originalProperty: VariableElement, propertyName: String, propertyType: TypeName)
 }
 
 
@@ -98,8 +95,9 @@ open class SimpleDtoMembersStrategy(
         return Statement("      $propertyName = this.$propertyName ?: original.$propertyName$commaOrEmpty")
     }
 
-    override fun toAltConstructorStatement(variableElement: VariableElement, commaOrEmpty: String): Statement? {
-        val propertyName = toPropertyName(variableElement)
+    override fun toAltConstructorStatement(
+            index: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String
+    ): Statement? {
         return Statement("      $propertyName = original.$propertyName$commaOrEmpty")
     }
 
@@ -116,10 +114,7 @@ open class SimpleDtoMembersStrategy(
             dtoConstructorBuilder.addParameter(ParameterSpec.builder(propertyName, propertyType)
                     .defaultValue(propertyDefaultValue)
                     .build())
-            val propertySpecBuilder = PropertySpec.builder(propertyName, propertyType)
-                    .mutable()
-                    .addModifiers(PUBLIC)
-                    .initializer(propertyName)
+            val propertySpecBuilder = toPropertySpecBuilder(index, originalProperty, propertyName, propertyType)
             addPropertyAnnotations(propertySpecBuilder, originalProperty)
             typeSpecBuilder.addProperty(propertySpecBuilder.build())
             // Add line to patch function
@@ -127,10 +122,24 @@ open class SimpleDtoMembersStrategy(
             // Add line to map function
             toStateFunctionCodeBuilder.addStatement(toMapStatement(originalProperty, commaOrEmpty))
             // Add line to alt constructor
-            dtoAltConstructorCodeBuilder.addStatement(toAltConstructorStatement(originalProperty, commaOrEmpty))
+            dtoAltConstructorCodeBuilder.addStatement(toAltConstructorStatement(index, originalProperty, propertyName, propertyType, commaOrEmpty))
+
+            fieldProcessed(index, originalProperty, propertyName, propertyType)
         }
         finalize(typeSpecBuilder)
     }
+
+    /** Override to add additional functionality to your [DtoMembersStrategy] implementation */
+    override fun fieldProcessed(index: Int, originalProperty: VariableElement, propertyName: String, propertyType: TypeName) {
+        // NO-OP
+    }
+
+    override fun toPropertySpecBuilder(
+            index: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName
+    ): PropertySpec.Builder = PropertySpec.builder(propertyName, propertyType)
+                .mutable()
+                .addModifiers(PUBLIC)
+                .initializer(propertyName)
 
     override fun getToPatchedFunctionBuilder(
             originalTypeParameter: ParameterSpec
