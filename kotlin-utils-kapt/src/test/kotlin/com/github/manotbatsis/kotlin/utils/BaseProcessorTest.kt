@@ -6,7 +6,8 @@ package com.github.manosbatsis.kotlin.utils
 import kotlin.test.Test
 
 class BaseProcessorTest {
-    @Test fun testSomeLibraryMethod() {
+    @Test
+    fun testSomeLibraryMethod() {
         //val classUnderTest = BaseProcessor()
         //assertTrue(classUnderTest.someLibraryMethod(), "someLibraryMethod should return 'true'")
     }

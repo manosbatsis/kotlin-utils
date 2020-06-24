@@ -1,27 +1,31 @@
-package com.github.manotbatsis.kotlin.utils.dto
+package com.github.manotbatsis.kotlin.utils.kapt.dto
 
-import com.squareup.kotlinpoet.asClassName
+import com.github.manotbatsis.kotlin.utils.kapt.dto.strategy.CompositeDtoStrategy
+import com.github.manotbatsis.kotlin.utils.kapt.dto.strategy.DtoStrategy
 import com.squareup.kotlinpoet.asTypeName
 import javax.annotation.processing.ProcessingEnvironment
 import javax.lang.model.element.TypeElement
 import javax.lang.model.element.VariableElement
 
-data class DtoTypeSpecBuilderContext(
+data class DtoInputContext(
         val processingEnvironment: ProcessingEnvironment,
         val originalTypeElement: TypeElement,
         val fields: List<VariableElement> = emptyList(),
         val copyAnnotationPackages: Iterable<String> = emptyList(),
-        private val dtoStrategyClass: Class<out DtoTypeSpecBuilderStrategy> = DefaultDtoTypeSpecBuilderStrategy::class.java
+        val dtoStrategyClass: Class<out DtoStrategy> = CompositeDtoStrategy::class.java
 ) {
+
+
     val originalTypeName by lazy { originalTypeElement.asType().asTypeName() }
+
+    // TODO: extract to factory
     val dtoStrategy by lazy {
-        dtoStrategyClass
-                .getConstructor(ProcessingEnvironment::class.java, DtoTypeSpecBuilderContext::class.java)
+        dtoStrategyClass.getConstructor(
+                ProcessingEnvironment::class.java,
+                DtoInputContext::class.java)
                 .newInstance(processingEnvironment, this)
     }
 
-    val targetPackage: String = dtoStrategy.mapPackageName(originalTypeElement.asClassName().packageName)
-
-    fun build() = dtoStrategy.dtoTypeSpec()
     fun builder() = dtoStrategy.dtoTypeSpecBuilder()
+
 }
