@@ -30,6 +30,15 @@ open class CompositeDtoStrategy(
 
     constructor(
             processingEnvironment: ProcessingEnvironment,
+            dtoInputContext: DtoInputContext
+    ) : this(
+            processingEnvironment,
+            dtoInputContext,
+            SimpleDtoStrategyComposition
+    )
+
+    constructor(
+            processingEnvironment: ProcessingEnvironment,
             dtoInputContext: DtoInputContext,
             composition: DtoStrategyComposition
     ) : this(
