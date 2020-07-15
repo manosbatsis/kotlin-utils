@@ -2,16 +2,15 @@ package com.github.manotbatsis.kotlin.utils.kapt.dto.strategy
 
 import com.github.manosbatsis.kotlin.utils.ProcessingEnvironmentAware
 import com.github.manotbatsis.kotlin.utils.api.Dto
-import com.github.manotbatsis.kotlin.utils.kapt.dto.DtoInputContext
-import com.github.manotbatsis.kotlin.utils.kapt.dto.DtoInputContextAware
+import com.github.manotbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 import com.squareup.kotlinpoet.KModifier.DATA
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.TypeSpec.Builder
 import com.squareup.kotlinpoet.asClassName
-import javax.annotation.processing.ProcessingEnvironment
 
 
-interface DtoTypeStrategy : DtoInputContextAware {
+interface DtoTypeStrategy {
+    val annotatedElementInfo: AnnotatedElementInfo
     /** Override to change the type-level annotations applied to the DTO  */
     fun addAnnotations(typeSpecBuilder: Builder)
 
@@ -27,16 +26,19 @@ interface DtoTypeStrategy : DtoInputContextAware {
 }
 
 open class SimpleDtoTypeStrategy(
-        override val processingEnvironment: ProcessingEnvironment,
-        override val dtoInputContext: DtoInputContext
+        override val annotatedElementInfo: AnnotatedElementInfo
 ) : DtoTypeStrategy, ProcessingEnvironmentAware {
 
+    override val processingEnvironment = annotatedElementInfo.processingEnvironment
     override fun addAnnotations(typeSpecBuilder: Builder) {
-        typeSpecBuilder.copyAnnotationsByBasePackage(dtoInputContext.originalTypeElement, dtoInputContext.copyAnnotationPackages)
+        typeSpecBuilder.copyAnnotationsByBasePackage(
+                annotatedElementInfo.primaryTargetTypeElement,
+                annotatedElementInfo.copyAnnotationPackages)
     }
 
     override fun addKdoc(typeSpecBuilder: Builder) {
-        typeSpecBuilder.addKdoc("A [%T]-specific [%T] implementation", dtoInputContext.originalTypeName, Dto::class)
+        typeSpecBuilder.addKdoc("A [%T]-specific [%T] implementation",
+                annotatedElementInfo.primaryTargetTypeElement, Dto::class)
     }
 
     override fun addModifiers(typeSpecBuilder: Builder) {
@@ -44,7 +46,8 @@ open class SimpleDtoTypeStrategy(
     }
 
     override fun addSuperTypes(typeSpecBuilder: Builder) {
-        typeSpecBuilder.addSuperinterface(Dto::class.asClassName().parameterizedBy(dtoInputContext.originalTypeName))
+        typeSpecBuilder.addSuperinterface(Dto::class.asClassName().parameterizedBy(
+                annotatedElementInfo.primaryTargetTypeElement.asKotlinTypeName()))
     }
 
 }

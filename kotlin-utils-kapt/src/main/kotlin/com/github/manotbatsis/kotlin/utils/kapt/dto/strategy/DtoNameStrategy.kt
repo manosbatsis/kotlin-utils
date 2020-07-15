@@ -1,30 +1,30 @@
 package com.github.manotbatsis.kotlin.utils.kapt.dto.strategy
 
-import com.github.manosbatsis.kotlin.utils.ProcessingEnvironmentAware
-import com.github.manotbatsis.kotlin.utils.kapt.dto.DtoInputContext
-import com.github.manotbatsis.kotlin.utils.kapt.dto.DtoInputContextAware
+import com.github.manotbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.asClassName
-import javax.annotation.processing.ProcessingEnvironment
 
-interface DtoNameStrategy : DtoInputContextAware {
+interface DtoNameStrategy  {
     /** Map input - output package name */
     fun mapPackageName(original: String): String
-
     /** Override to change the DTO package and class name */
     fun getClassName(): ClassName
+    /** Override to change the DTO package and class name */
+    fun getClassNameSuffix(): String
 }
 
 open class SimpleDtoNameStrategy(
-        override val processingEnvironment: ProcessingEnvironment,
-        override val dtoInputContext: DtoInputContext
-) : DtoNameStrategy, ProcessingEnvironmentAware {
+    val annotatedElementInfo: AnnotatedElementInfo
+) : DtoNameStrategy, AnnotatedElementInfo by annotatedElementInfo {
 
-    override fun mapPackageName(original: String): String =
-            "${original}.generated"
+    override fun mapPackageName(original: String): String = original
 
-    override fun getClassName() = ClassName(
-            mapPackageName(dtoInputContext.originalTypeElement.asClassName().packageName),
-            "${dtoInputContext.originalTypeElement.simpleName}Dto")
+    override fun getClassName(): ClassName {
+        val packageName = primaryTargetTypeElement.asClassName().packageName
+        val mappedPackageName = mapPackageName(packageName)
+        return ClassName(mappedPackageName, "${primaryTargetTypeElement.simpleName}${getClassNameSuffix()}")
+    }
+
+    override fun getClassNameSuffix(): String = "Dto"
 
 }

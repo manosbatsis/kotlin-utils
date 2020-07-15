@@ -3,22 +3,20 @@ package com.github.manotbatsis.kotlin.utils.kapt.dto.strategy
 import com.github.manosbatsis.kotlin.utils.ProcessingEnvironmentAware
 import com.github.manotbatsis.kotlin.utils.api.DefaultValue
 import com.github.manotbatsis.kotlin.utils.api.DtoInsufficientMappingException
-import com.github.manotbatsis.kotlin.utils.kapt.dto.DtoInputContext
-import com.github.manotbatsis.kotlin.utils.kapt.dto.DtoInputContextAware
 import com.github.manotbatsis.kotlin.utils.kapt.dto.strategy.DtoMembersStrategy.Statement
+import com.github.manotbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget.FIELD
 import com.squareup.kotlinpoet.KModifier.OVERRIDE
 import com.squareup.kotlinpoet.KModifier.PUBLIC
 import com.squareup.kotlinpoet.TypeSpec.Builder
-import javax.annotation.processing.ProcessingEnvironment
 import javax.lang.model.element.VariableElement
 
 /**
  * Used optionally to implement delegates
  * for a subset of [DtoTypeStrategy]
  */
-interface DtoMembersStrategy : DtoInputContextAware {
+interface DtoMembersStrategy: ProcessingEnvironmentAware {
     data class Statement(val format: String, val args: Array<Any?> = emptyArray())
 
     /** Override to modify processing of individual fields */
@@ -43,13 +41,12 @@ interface DtoMembersStrategy : DtoInputContextAware {
 
 
 open class SimpleDtoMembersStrategy(
-        override val processingEnvironment: ProcessingEnvironment,
-        override val dtoInputContext: DtoInputContext
-) : DtoMembersStrategy, ProcessingEnvironmentAware {
+        val annotatedElementInfo: AnnotatedElementInfo
+) : DtoMembersStrategy, AnnotatedElementInfo by annotatedElementInfo {
 
 
     // Original type parameter, used in alt constructor and util functions
-    val originalTypeParameter = ParameterSpec.builder("original", dtoInputContext.originalTypeName).build()
+    val originalTypeParameter = ParameterSpec.builder("original", primaryTargetTypeElement.asKotlinTypeName()).build()
 
     // Create DTO primary constructor
     val dtoConstructorBuilder = FunSpec.constructorBuilder()
@@ -58,22 +55,22 @@ open class SimpleDtoMembersStrategy(
     val dtoAltConstructorBuilder = FunSpec.constructorBuilder().addParameter(originalTypeParameter)
             .addKdoc(CodeBlock.builder()
                     .addStatement("Alternative constructor, used to map ")
-                    .addStatement("from the given [%T] instance.", dtoInputContext.originalTypeName).build())
+                    .addStatement("from the given [%T] instance.", primaryTargetTypeElement.asKotlinTypeName()).build())
     val dtoAltConstructorCodeBuilder = CodeBlock.builder().addStatement("")
 
     // Create patch function
     val patchFunctionBuilder = getToPatchedFunctionBuilder(originalTypeParameter)
-    val patchFunctionCodeBuilder = CodeBlock.builder().addStatement("val patched = %T(", dtoInputContext.originalTypeName)
+    val patchFunctionCodeBuilder = CodeBlock.builder().addStatement("val patched = %T(", primaryTargetTypeElement.asKotlinTypeName())
 
     // Create mapping function
     val toStateFunctionBuilder = getToTargetTypeFunctionBuilder()
     val toStateFunctionCodeBuilder = CodeBlock.builder()
             .addStatement("try {")
-            .addStatement("   val originalTypeInstance = %T(", dtoInputContext.originalTypeName)
+            .addStatement("   val originalTypeInstance = %T(", primaryTargetTypeElement.asKotlinTypeName())
 
 
     override fun addPropertyAnnotations(propertySpecBuilder: PropertySpec.Builder, variableElement: VariableElement) {
-        propertySpecBuilder.copyAnnotationsByBasePackage(variableElement, dtoInputContext.copyAnnotationPackages, FIELD)
+        propertySpecBuilder.copyAnnotationsByBasePackage(variableElement, copyAnnotationPackages, FIELD)
     }
 
     override fun toPropertyName(variableElement: VariableElement): String =
@@ -147,10 +144,10 @@ open class SimpleDtoMembersStrategy(
         val patchFunctionBuilder = FunSpec.builder("toPatched")
                 .addModifiers(OVERRIDE)
                 .addKdoc(CodeBlock.builder()
-                        .addStatement("Create a patched copy of the given [%T] instance,", dtoInputContext.originalTypeName)
+                        .addStatement("Create a patched copy of the given [%T] instance,", primaryTargetTypeElement.asKotlinTypeName())
                         .addStatement("updated using this DTO's non-null properties.").build())
                 .addParameter(originalTypeParameter)
-                .returns(dtoInputContext.originalTypeName)
+                .returns(primaryTargetTypeElement.asKotlinTypeName())
         return patchFunctionBuilder
     }
 
@@ -158,10 +155,10 @@ open class SimpleDtoMembersStrategy(
         val toStateFunctionBuilder = FunSpec.builder("toTargetType")
                 .addModifiers(OVERRIDE)
                 .addKdoc(CodeBlock.builder()
-                        .addStatement("Create an instance of [%T], using this DTO's properties.", dtoInputContext.originalTypeName)
+                        .addStatement("Create an instance of [%T], using this DTO's properties.", primaryTargetTypeElement.asKotlinTypeName())
                         .addStatement("May throw a [DtoInsufficientStateMappingException] ")
                         .addStatement("if there is mot enough information to do so.").build())
-                .returns(dtoInputContext.originalTypeName)
+                .returns(primaryTargetTypeElement.asKotlinTypeName())
         return toStateFunctionBuilder
     }
 

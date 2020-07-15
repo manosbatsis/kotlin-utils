@@ -1,52 +1,38 @@
 package com.github.manotbatsis.kotlin.utils.kapt.dto.strategy
 
-import com.github.manosbatsis.kotlin.utils.ProcessingEnvironmentAware
-import com.github.manotbatsis.kotlin.utils.kapt.dto.DtoInputContext
+import com.github.manotbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeSpec.Builder
 import com.squareup.kotlinpoet.TypeVariableName
+import com.squareup.kotlinpoet.asTypeName
 import javax.annotation.processing.ProcessingEnvironment
 import javax.lang.model.element.VariableElement
 
 
 /** Delegate-based implementation of [DtoStrategy] */
 open class CompositeDtoStrategy(
-        override val processingEnvironment: ProcessingEnvironment,
-        override val dtoInputContext: DtoInputContext,
-        val dtoNameStrategy: DtoNameStrategy = SimpleDtoNameStrategy(
-                processingEnvironment, dtoInputContext
-        ),
-        val dtoMembersStrategy: DtoMembersStrategy = SimpleDtoMembersStrategy(
-                processingEnvironment, dtoInputContext
-        ),
-        val dtoTypeStrategy: DtoTypeStrategy = SimpleDtoTypeStrategy(
-                processingEnvironment, dtoInputContext
-        )
-) : DtoStrategy, ProcessingEnvironmentAware,
+        override val annotatedElementInfo: AnnotatedElementInfo,
+        override val processingEnvironment: ProcessingEnvironment = annotatedElementInfo.processingEnvironment,
+        val dtoNameStrategy: DtoNameStrategy = SimpleDtoNameStrategy(annotatedElementInfo),
+        val dtoMembersStrategy: DtoMembersStrategy = SimpleDtoMembersStrategy(annotatedElementInfo),
+        val dtoTypeStrategy: DtoTypeStrategy = SimpleDtoTypeStrategy(annotatedElementInfo)
+) : DtoStrategy,
+        AnnotatedElementInfo by annotatedElementInfo,
         DtoTypeStrategy by dtoTypeStrategy,
         DtoNameStrategy by dtoNameStrategy,
         DtoMembersStrategy by dtoMembersStrategy {
 
 
-    constructor(
-            processingEnvironment: ProcessingEnvironment,
-            dtoInputContext: DtoInputContext
-    ) : this(
-            processingEnvironment,
-            dtoInputContext,
-            SimpleDtoStrategyComposition
-    )
 
     constructor(
-            processingEnvironment: ProcessingEnvironment,
-            dtoInputContext: DtoInputContext,
+            annotatedElementInfo: AnnotatedElementInfo,
             composition: DtoStrategyComposition
     ) : this(
-            processingEnvironment,
-            dtoInputContext,
-            composition.dtoNameStrategy(processingEnvironment, dtoInputContext),
-            composition.dtoMembersStrategy(processingEnvironment, dtoInputContext),
-            composition.dtoTypeStrategy(processingEnvironment, dtoInputContext)
+            annotatedElementInfo,
+            annotatedElementInfo.processingEnvironment,
+            composition.dtoNameStrategy(annotatedElementInfo),
+            composition.dtoMembersStrategy( annotatedElementInfo),
+            composition.dtoTypeStrategy(annotatedElementInfo)
     )
 
     override fun dtoTypeSpec(): TypeSpec = dtoTypeSpecBuilder().build()
@@ -58,8 +44,9 @@ open class CompositeDtoStrategy(
         addKdoc(dtoTypeSpecBuilder)
         addAnnotations(dtoTypeSpecBuilder)
         addMembers(dtoTypeSpecBuilder)
-        this.dtoInputContext.originalTypeElement.typeParameters.forEach {
-            dtoTypeSpecBuilder.addTypeVariable(TypeVariableName.invoke(it.simpleName.toString(), *it.bounds.map { it.asKotlinTypeName() }.toTypedArray()))
+        primaryTargetTypeElement.typeParameters.forEach {
+            dtoTypeSpecBuilder.addTypeVariable(
+                    TypeVariableName.invoke(it.simpleName.toString(), *it.bounds.map { it.asTypeName() }.toTypedArray()))
         }
 
         return dtoTypeSpecBuilder
@@ -72,8 +59,7 @@ open class CompositeDtoStrategy(
     }
 
     override fun getFieldsToProcess(): List<VariableElement> =
-            if (dtoInputContext.fields.isNotEmpty()) dtoInputContext.fields
-            else dtoInputContext.originalTypeElement.accessibleConstructorParameterFields()
+            primaryTargetTypeElementFields.filterNot { ignoreProperties.contains(it.simpleName.toString()) }
 
 
 }

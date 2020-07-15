@@ -12,7 +12,8 @@ data class DtoInputContext(
         val originalTypeElement: TypeElement,
         val fields: List<VariableElement> = emptyList(),
         val copyAnnotationPackages: Iterable<String> = emptyList(),
-        val dtoStrategyClass: Class<out DtoStrategy> = CompositeDtoStrategy::class.java
+        val dtoStrategyClass: Class<out DtoStrategy> = CompositeDtoStrategy::class.java,
+        var dtoStrategyInstance: DtoStrategy? = null
 ) {
 
 
@@ -20,7 +21,7 @@ data class DtoInputContext(
 
     // TODO: extract to factory
     val dtoStrategy by lazy {
-        dtoStrategyClass.getConstructor(
+        dtoStrategyInstance ?: dtoStrategyClass.getConstructor(
                 ProcessingEnvironment::class.java,
                 DtoInputContext::class.java)
                 .newInstance(processingEnvironment, this)

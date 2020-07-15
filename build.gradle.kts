@@ -34,7 +34,7 @@ apply<IdeaPlugin>()
 
 allprojects {
     group = "com.github.manosbatsis.kotlin-utils"
-    version = "0.19"
+    version = "0.20-SNAPSHOT"
     description = "Kotlin Utilities"
 
     repositories {
@@ -49,6 +49,7 @@ allprojects {
 
 subprojects {
     apply(plugin = "maven")
+    apply(plugin = "java")
     apply(plugin = "kotlin")
     apply(plugin = "org.jetbrains.dokka")
     apply(plugin = "signing")

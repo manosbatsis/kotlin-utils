@@ -1,44 +1,34 @@
 package com.github.manotbatsis.kotlin.utils.kapt.dto.strategy
 
-import com.github.manotbatsis.kotlin.utils.kapt.dto.DtoInputContext
-import javax.annotation.processing.ProcessingEnvironment
+import com.github.manotbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 
 interface DtoStrategyComposition {
     fun dtoNameStrategy(
-            processingEnvironment: ProcessingEnvironment,
-            dtoInputContext: DtoInputContext
+            annotatedElementInfo: AnnotatedElementInfo
     ): DtoNameStrategy
 
     fun dtoMembersStrategy(
-            processingEnvironment: ProcessingEnvironment,
-            dtoInputContext: DtoInputContext
+            annotatedElementInfo: AnnotatedElementInfo
     ): DtoMembersStrategy
 
     fun dtoTypeStrategy(
-            processingEnvironment: ProcessingEnvironment,
-            dtoInputContext: DtoInputContext
+            annotatedElementInfo: AnnotatedElementInfo
     ): DtoTypeStrategy
 }
 
-object SimpleDtoStrategyComposition : DtoStrategyComposition {
+open class SimpleDtoStrategyComposition : DtoStrategyComposition {
     override fun dtoNameStrategy(
-            processingEnvironment: ProcessingEnvironment,
-            dtoInputContext: DtoInputContext
+            annotatedElementInfo: AnnotatedElementInfo
     ): DtoNameStrategy = SimpleDtoNameStrategy(
-            processingEnvironment, dtoInputContext
+            annotatedElementInfo
     )
 
     override fun dtoMembersStrategy(
-            processingEnvironment: ProcessingEnvironment,
-            dtoInputContext: DtoInputContext
+            annotatedElementInfo: AnnotatedElementInfo
     ): DtoMembersStrategy = SimpleDtoMembersStrategy(
-            processingEnvironment, dtoInputContext
+            annotatedElementInfo
     )
 
-    override fun dtoTypeStrategy(
-            processingEnvironment: ProcessingEnvironment,
-            dtoInputContext: DtoInputContext
-    ): DtoTypeStrategy = SimpleDtoTypeStrategy(
-            processingEnvironment, dtoInputContext
-    )
+    override fun dtoTypeStrategy(annotatedElementInfo: AnnotatedElementInfo
+    ): DtoTypeStrategy = SimpleDtoTypeStrategy(annotatedElementInfo)
 }
