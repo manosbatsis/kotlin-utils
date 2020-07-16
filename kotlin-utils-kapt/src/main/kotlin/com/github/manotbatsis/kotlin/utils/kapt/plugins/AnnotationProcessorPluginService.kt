@@ -1,9 +1,10 @@
-package com.github.manosbatsis.vaultaire.processor.plugins
+package com.github.manotbatsis.kotlin.utils.kapt.plugins
 
-import com.github.manotbatsis.kotlin.utils.api.AnnotationProcessorPlugin
-import java.util.ServiceLoader
+import com.github.manotbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
+import java.util.*
 
-class AnnotationProcessorPluginService(
+/** Used by annotation processor to load plugins */
+class AnnotationProcessorPluginService private constructor(
         val classLoader: ClassLoader
 ) {
     companion object {
@@ -12,25 +13,50 @@ class AnnotationProcessorPluginService(
                 mutableMapOf()
 
         /** Get a possibly cached instance for the given [ClassLoader] */
-        fun forClassLoader(classLoader: ClassLoader) =
+        fun getInstance(
+                classLoader: ClassLoader = AnnotationProcessorPluginService::class.java.classLoader
+        ) =
                 serviceLoaders.getOrPut(
                         System.identityHashCode(classLoader),
                         { AnnotationProcessorPluginService(classLoader) })
     }
 
-    private val loaders: MutableMap<Class<*>, List<*>> =
+    private val loaders: MutableMap<Class<out AnnotationProcessorPlugin>, List<out AnnotationProcessorPlugin>> =
             mutableMapOf()
 
-    fun <T : AnnotationProcessorPlugin> forServiceType(
-            serviceType: Class<T>,
-            default: T
-    ): T {
-        val loaders = loaders.getOrPut(serviceType, {
-            ServiceLoader.load(serviceType, classLoader)
+    fun <T : AnnotationProcessorPlugin> findPlugins(
+            pluginType: Class<T>
+    ): Set<T> {
+        val candidates = loaders.getOrPut(pluginType, {
+            ServiceLoader.load(pluginType, classLoader)
                     .map { it }
-        }) as List<T>
-        return loaders.firstOrNull() ?: default
+        }).map {
+            @Suppress("UNCHECKED_CAST")
+            it as T
+        }
+        return candidates.toSet()
     }
+
+    fun <T : AnnotationProcessorPlugin> findPlugin(
+            serviceType: Class<T>, annotatedElementInfo: AnnotatedElementInfo, strategy: String? = null
+    ): T? {
+        val candidates = findPlugins(serviceType).toMutableList()
+
+        println("AnnotationProcessorPluginService findPlugin for ${annotatedElementInfo.primaryTargetTypeElementSimpleName} ${serviceType.simpleName}, strategy: $strategy")
+        candidates.sortBy {
+            val priority = it.getSupportPriority(annotatedElementInfo, strategy)
+            println("AnnotationProcessorPluginService findPlugin matched ${it.javaClass.simpleName} with priority: $priority")
+            priority
+        }
+        val selected = candidates.lastOrNull()
+        println("AnnotationProcessorPluginService findPlugin selected: $selected")
+        return selected
+    }
+
+    fun <T : AnnotationProcessorPlugin> getPlugin(
+            serviceType: Class<T>, annotatedElementInfo: AnnotatedElementInfo, strategy: String? = null
+    ): T = findPlugin(serviceType, annotatedElementInfo, strategy)
+            ?: error("No matching service for given annotatedElementInfo using type: ${serviceType}, strategy: $strategy")
 
 
 }

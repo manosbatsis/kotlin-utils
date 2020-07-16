@@ -292,7 +292,38 @@ interface ProcessingEnvironmentAware {
     /** Get the given annotation's value if it exists, null otherwise */
     fun Element.findAnnotationValue(annotation: Class<out Annotation>, propertyName: String): AnnotationValue? =
             this.findAnnotationMirror(annotation)?.findAnnotationValue(propertyName)
-
+/*
+String key = entry.getKey().getSimpleName().toString();
+                Object value = entry.getValue().getValue();
+                switch (key) {
+                    case "intValue":
+                        int intVal = (Integer) value;
+                        System.out.printf(">> intValue: %d\n", intVal);
+                        break;
+                    case "stringValue":
+                        String strVal = (String) value;
+                        System.out.printf(">> stringValue: %s\n", strVal);
+                        break;
+                    case "enumValue":
+                        VariableElement enumVal = ((VariableElement) value);
+                        System.out.printf(">> enumValue: %s\n", enumVal.getSimpleName());
+                        break;
+                    case "annotationTypeValue":
+                        AnnotationMirror anoTypeVal = (AnnotationMirror) value;
+                        System.out.printf(">> annotationTypeValue: %s\n", anoTypeVal.toString());
+                        break;
+                    case "classValue":
+                        TypeMirror typeMirror = (TypeMirror) value;
+                        System.out.printf(">> classValue: %s\n", typeMirror.toString());
+                        break;
+                    case "classesValue":
+                        List<? extends AnnotationValue> typeMirrors
+                            = (List<? extends AnnotationValue>) value;
+                        System.out.printf(">> classesValue: %s\n",
+                            ((TypeMirror) typeMirrors.get(0).getValue()).toString());
+                        break;
+                }
+ */
     /** Get the given annotation value as a [TypeElement] if it exists, null otherwise */
     fun AnnotationMirror.findValueAsTypeElement(propertyName: String): TypeElement? {
         val annotationMirrorValue = this.findValueAsTypeMirror(propertyName) ?: return null
@@ -306,32 +337,63 @@ interface ProcessingEnvironmentAware {
     }
 
     /** Get the given annotation value as a [TypeElement] if it exists, throw an error otherwise */
-    fun AnnotationMirror.getValueAsTypeElement(propertyName: String): TypeElement =
-            this.findValueAsTypeElement(propertyName)
-                    ?: throw IllegalStateException("Could not find a valid value for $propertyName")
+    fun AnnotationMirror.getValueAsTypeElement(memberName: String): TypeElement =
+            this.findValueAsTypeElement(memberName)
+                    ?: throw IllegalStateException("Could not find a valid value for $memberName")
 
     /** Get the given annotation value as a [AnnotationValue] if it exists, throw an error otherwise */
-    fun AnnotationMirror.getAnnotationValue(name: String): AnnotationValue =
-            findAnnotationValue(name) ?: throw IllegalStateException("Annotation value not found for string '$name'")
+    fun AnnotationMirror.getAnnotationValue(memberName: String): AnnotationValue =
+            findAnnotationValue(memberName) ?: throw IllegalStateException("Annotation value not found for string '$memberName'")
 
     /** Get the given annotation value as a [AnnotationValue] if it exists, null otherwise */
-    fun AnnotationMirror.findAnnotationValue(name: String): AnnotationValue? =
-            processingEnvironment.elementUtils.getElementValuesWithDefaults(this).keys
-                    .filter { k -> k.simpleName.toString() == name }
-                    .mapNotNull { k -> elementValues[k] }
+    fun AnnotationMirror.findAnnotationValue(memberName: String): AnnotationValue? =
+            processingEnvironment.elementUtils.getElementValuesWithDefaults(this).entries
+                    .filter { entry -> entry.key.simpleName.toString() == memberName }
+                    .mapNotNull { entry -> entry.value }
                     .firstOrNull()
 
+    /** Get the given annotation value as a [String] if it exists, null otherwise */
+    fun AnnotationMirror.findAnnotationValueString(memberName: String): String? =
+            findAnnotationValue(memberName)?.value as String?
+
+    /** Get the given annotation value as a [String] if it exists, null otherwise */
+    fun AnnotationMirror.findAnnotationValueEnum(memberName: String): VariableElement? =
+            findAnnotationValue(memberName)?.value as VariableElement?
+
+
     /** Get the given annotation value as a list of [AnnotationValue] if it exists, null otherwise */
-    fun AnnotationMirror.findAnnotationValueList(memberName: String): List<AnnotationValue>? =
-            processingEnvironment.elementUtils.getElementValuesWithDefaults(this).entries
-                    .filter { it.key.simpleName.toString() == memberName }
-                    .mapNotNull { it.value.value }
-                    .firstOrNull() as List<AnnotationValue>?
+    fun AnnotationMirror.findAnnotationValueList(memberName: String): List<AnnotationValue>? {
+        return findAnnotationValue(memberName)?.value as List<AnnotationValue>?
+    }
 
-    /** Get the given annotation value as a `List<String>` of [AnnotationValue] if it exists, an empty list otherwise */
-    fun AnnotationMirror.findAnnotationValueStringsList(memberName: String): List<String> =
-            this.findAnnotationValueList(memberName)?.mapNotNull { it.value.toString() } ?: emptyList()
+    /** Get the given annotation value as a `List<String>` if it exists, null otherwise */
+    fun AnnotationMirror.findAnnotationValueListString(memberName: String): List<String>? {
+        return findAnnotationValueList(memberName)?.map{ it.value.toString() }
+    }
 
+    /** Get the given annotation value as a `List<VariableElement>`if it exists, null otherwise */
+    fun <T : Enum<T>> AnnotationMirror.findAnnotationValueListEnum(
+            memberName: String,
+            enumType: Class<T>//TODO: add optiona function ref, use valueOf as default
+    ): List<T>? {
+        return findAnnotationValueList(memberName)?.map{java.lang.Enum.valueOf(enumType, it.value.toString())}
+    }
+/*
+getDtoStrategies, it: com.github.manosbatsis.vaultaire.annotation.VaultaireDtoStrategyKeys.DEFAULT
+Note: getDtoStrategies, it type: class com.sun.tools.javac.code.Attribute$Enum
+Note: getDtoStrategies, it.val;ue: DEFAULT
+Note: getDtoStrategies, it.val;ue type: class com.sun.tools.javac.code.Symbol$VarSymbol
+Note: getDtoStrategies, it: com.github.manosbatsis.vaultaire.annotation.VaultaireDtoStrategyKeys.LITENote: getDtoStrategies, it type: class com.sun.tools.javac.code.Attribute$EnumNote: getDtoStrategies, it.val;ue: LITENote: getDtoStrategies, it.val;ue type: class com.sun.tools.javac.code.Symbol$VarSymbol                                                                                                                                                                                                       */
+    /** Get the given annotation value as a `List<VariableElement>`if it exists, an empty list otherwise */
+    fun AnnotationMirror.findAnnotationValueListTypeMirror(memberName: String): List<TypeMirror>? {
+        return findAnnotationValueList(memberName)?.map{ it.value as TypeMirror }
+    }
+
+    /** Get the given annotation value as a `List<TypeElement>`if it exists, null otherwise */
+    fun AnnotationMirror.findAnnotationValueListTypeElement(memberName: String): List<TypeElement>? {
+        return findAnnotationValueListTypeMirror(memberName)
+                ?.map{ processingEnvironment.typeUtils.asElement(it) as TypeElement }
+    }
 
     /** Prints an error message using this element as a position hint. */
     fun Element.errorMessage(message: () -> String) {
@@ -371,8 +433,7 @@ interface ProcessingEnvironmentAware {
 
 
     fun getStringValuesList(annotationMirror: AnnotationMirror?, memberName: String): List<String> {
-        return if (annotationMirror == null) emptyList()
-        else annotationMirror.findAnnotationValueList(memberName)?.mapNotNull { it.value.toString() } ?: emptyList()
+        return annotationMirror?.findAnnotationValueListString(memberName) ?: emptyList()
     }
 
 }

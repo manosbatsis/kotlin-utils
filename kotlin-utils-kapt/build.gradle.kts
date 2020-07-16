@@ -18,6 +18,10 @@ dependencies {
         exclude(group = "org.jetbrains.kotlin")
     }
 
-    api ("com.thinkinglogic.builder:kotlin-builder-annotation:1.2.0")
-    kapt ("com.thinkinglogic.builder:kotlin-builder-processor:1.2.0")
+    api ("com.thinkinglogic.builder:kotlin-builder-annotation:1.2.0") {
+        exclude(group = "org.jetbrains.kotlin")
+    }
+    kapt ("com.thinkinglogic.builder:kotlin-builder-processor:1.2.0") {
+        exclude(group = "org.jetbrains.kotlin")
+    }
 }

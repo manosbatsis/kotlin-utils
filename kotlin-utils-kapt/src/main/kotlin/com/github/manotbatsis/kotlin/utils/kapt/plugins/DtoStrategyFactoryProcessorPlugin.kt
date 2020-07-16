@@ -1,28 +1,30 @@
 package com.github.manotbatsis.kotlin.utils.kapt.plugins
 
-import com.github.manotbatsis.kotlin.utils.api.AnnotationProcessorPlugin
 import com.github.manotbatsis.kotlin.utils.kapt.dto.strategy.DtoStrategy
 import com.github.manotbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 
 
 interface DtoStrategyFactoryProcessorPlugin : AnnotationProcessorPlugin {
-    fun buildDtoInputContext(
-            annotatedElementInfo: AnnotatedElementInfo,
-            dtoStrategyClass: Class<out DtoStrategy>
+
+    fun getStrategyClass(strategy: String): Class<out DtoStrategy>
+
+    fun createStrategy(
+            annotatedElementInfo: AnnotatedElementInfo, strategy: String
     ): DtoStrategy
 }
 
 
-open class DefaultDtoStrategyFactoryProcessorPlugin: DtoStrategyFactoryProcessorPlugin {
-    override fun buildDtoInputContext(
-            annotatedElementInfo: AnnotatedElementInfo,
-            dtoStrategyClass: Class<out DtoStrategy>
+abstract class AbstractDtoStrategyFactoryProcessorPlugin: DtoStrategyFactoryProcessorPlugin {
+
+    override fun createStrategy(
+            annotatedElementInfo: AnnotatedElementInfo, strategy: String
     ): DtoStrategy {
 
-        val dtoStrategy = dtoStrategyClass
+        val dtoStrategy = getStrategyClass(strategy)
                 .getConstructor( AnnotatedElementInfo::class.java )
                 .newInstance(annotatedElementInfo)
 
         return dtoStrategy
     }
+
 }

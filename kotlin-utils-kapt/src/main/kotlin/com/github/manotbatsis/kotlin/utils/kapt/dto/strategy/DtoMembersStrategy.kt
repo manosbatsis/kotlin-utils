@@ -37,6 +37,7 @@ interface DtoMembersStrategy: ProcessingEnvironmentAware {
     fun toAltConstructorStatement(index: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String): Statement?
     fun toPropertySpecBuilder(index: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName): PropertySpec.Builder
     fun fieldProcessed(index: Int, originalProperty: VariableElement, propertyName: String, propertyType: TypeName)
+    fun getAltConstructorBuilder(): FunSpec.Builder
 }
 
 
@@ -51,11 +52,6 @@ open class SimpleDtoMembersStrategy(
     // Create DTO primary constructor
     val dtoConstructorBuilder = FunSpec.constructorBuilder()
 
-    // Create DTO alternative constructor
-    val dtoAltConstructorBuilder = FunSpec.constructorBuilder().addParameter(originalTypeParameter)
-            .addKdoc(CodeBlock.builder()
-                    .addStatement("Alternative constructor, used to map ")
-                    .addStatement("from the given [%T] instance.", primaryTargetTypeElement.asKotlinTypeName()).build())
     val dtoAltConstructorCodeBuilder = CodeBlock.builder().addStatement("")
 
     // Create patch function
@@ -138,6 +134,12 @@ open class SimpleDtoMembersStrategy(
                 .addModifiers(PUBLIC)
                 .initializer(propertyName)
 
+    // Create DTO alternative constructor
+    override fun getAltConstructorBuilder() = FunSpec.constructorBuilder().addParameter(originalTypeParameter)
+            .addKdoc(CodeBlock.builder()
+                    .addStatement("Alternative constructor, used to map ")
+                    .addStatement("from the given [%T] instance.", primaryTargetTypeElement.asKotlinTypeName()).build())
+
     override fun getToPatchedFunctionBuilder(
             originalTypeParameter: ParameterSpec
     ): FunSpec.Builder {
@@ -164,7 +166,8 @@ open class SimpleDtoMembersStrategy(
 
     protected open fun finalize(typeSpecBuilder: TypeSpec.Builder) {
         // Complete alt constructor
-        dtoAltConstructorBuilder.callThisConstructor(dtoAltConstructorCodeBuilder.build())
+        val dtoAltConstructorBuilder = getAltConstructorBuilder()
+                .callThisConstructor(dtoAltConstructorCodeBuilder.build())
         // Complete patch function
         patchFunctionCodeBuilder.addStatement(")")
         patchFunctionCodeBuilder.addStatement("return patched")
