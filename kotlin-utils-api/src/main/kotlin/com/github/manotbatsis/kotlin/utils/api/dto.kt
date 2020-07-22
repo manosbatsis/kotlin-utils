@@ -2,8 +2,8 @@ package com.github.manotbatsis.kotlin.utils.api
 
 /** Occurs when a DTO has insufficient information for mapping to a data class */
 class DtoInsufficientMappingException(
-        message: String = "Insufficient information while mapping DTO to data",
-        exception: Exception? = null) : RuntimeException(message, exception)
+        message: String = "Error while mapping DTO to data",
+        exception: Exception? = null) : RuntimeException("$message: ${exception?.message} ${exception?.cause?.message}", exception)
 
 interface Dto<T : Any> {
     /**

@@ -7,6 +7,7 @@ import com.squareup.kotlinpoet.KModifier.DATA
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.TypeSpec.Builder
 import com.squareup.kotlinpoet.asClassName
+import javax.lang.model.element.TypeElement
 
 
 interface DtoTypeStrategy {
@@ -23,6 +24,8 @@ interface DtoTypeStrategy {
     /** Override to change the super types the DTO extends or implements  */
     fun addSuperTypes(typeSpecBuilder: Builder)
 
+    fun getDtoInterface(): Class<out Dto<*>>
+    fun getDtoTarget(): TypeElement
 }
 
 open class SimpleDtoTypeStrategy(
@@ -38,7 +41,7 @@ open class SimpleDtoTypeStrategy(
 
     override fun addKdoc(typeSpecBuilder: Builder) {
         typeSpecBuilder.addKdoc("A [%T]-specific [%T] implementation",
-                annotatedElementInfo.primaryTargetTypeElement, Dto::class)
+                annotatedElementInfo.primaryTargetTypeElement, getDtoInterface())
     }
 
     override fun addModifiers(typeSpecBuilder: Builder) {
@@ -46,9 +49,17 @@ open class SimpleDtoTypeStrategy(
     }
 
     override fun addSuperTypes(typeSpecBuilder: Builder) {
-        typeSpecBuilder.addSuperinterface(Dto::class.asClassName().parameterizedBy(
-                annotatedElementInfo.primaryTargetTypeElement.asKotlinTypeName()))
+        typeSpecBuilder.addSuperinterface(getParameterizedDtoInterfaceTypeName())
     }
+
+    private fun getParameterizedDtoInterfaceTypeName() =
+            getDtoInterface().asClassName().parameterizedBy(
+                    annotatedElementInfo.primaryTargetTypeElement.asKotlinTypeName())
+
+    override fun getDtoInterface(): Class<out Dto<*>> = Dto::class.java
+
+    override fun getDtoTarget(): TypeElement = annotatedElementInfo.primaryTargetTypeElement
+
 
 }
 

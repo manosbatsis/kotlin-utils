@@ -2,7 +2,6 @@ package com.github.manotbatsis.kotlin.utils.kapt.dto.strategy
 
 import com.github.manotbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 import com.squareup.kotlinpoet.ClassName
-import com.squareup.kotlinpoet.asClassName
 
 interface DtoNameStrategy  {
     /** Map input - output package name */
@@ -20,8 +19,7 @@ open class SimpleDtoNameStrategy(
     override fun mapPackageName(original: String): String = original
 
     override fun getClassName(): ClassName {
-        val packageName = primaryTargetTypeElement.asClassName().packageName
-        val mappedPackageName = mapPackageName(packageName)
+        val mappedPackageName = mapPackageName(annotatedElementInfo.generatedPackageName)
         return ClassName(mappedPackageName, "${primaryTargetTypeElement.simpleName}${getClassNameSuffix()}")
     }
 
