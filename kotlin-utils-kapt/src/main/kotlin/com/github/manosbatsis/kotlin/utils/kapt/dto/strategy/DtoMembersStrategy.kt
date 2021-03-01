@@ -1,10 +1,10 @@
-package com.github.manotbatsis.kotlin.utils.kapt.dto.strategy
+package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy
 
 import com.github.manosbatsis.kotlin.utils.ProcessingEnvironmentAware
-import com.github.manotbatsis.kotlin.utils.api.DefaultValue
-import com.github.manotbatsis.kotlin.utils.api.DtoInsufficientMappingException
-import com.github.manotbatsis.kotlin.utils.kapt.dto.strategy.DtoMembersStrategy.Statement
-import com.github.manotbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
+import com.github.manosbatsis.kotlin.utils.api.DefaultValue
+import com.github.manosbatsis.kotlin.utils.api.DtoInsufficientMappingException
+import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.DtoMembersStrategy.Statement
+import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget.FIELD
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FunSpec
@@ -37,10 +37,19 @@ interface DtoMembersStrategy: ProcessingEnvironmentAware {
     /** Override to modify processing of individual fields */
     fun processFields(typeSpecBuilder: Builder, fields: List<VariableElement>)
 
+    /**
+     * Override to modify processing of DTO-specific fields,
+     * e.g. from mixins
+     */
+    fun processDtoOnlyFields(
+        typeSpecBuilder: TypeSpec.Builder,
+        fields: List<VariableElement>
+    )
+
     /** Override to change the property-level annotations applied   */
     fun addPropertyAnnotations(propertySpecBuilder: PropertySpec.Builder, variableElement: VariableElement)
     fun getToPatchedFunctionBuilder(
-            originalTypeParameter: ParameterSpec
+        originalTypeParameter: ParameterSpec
     ): FunSpec.Builder
 
     fun getToTargetTypeFunctionBuilder(): FunSpec.Builder
@@ -57,6 +66,7 @@ interface DtoMembersStrategy: ProcessingEnvironmentAware {
     fun getCreatorFunctionBuilder(originalTypeParameter: ParameterSpec): FunSpec.Builder
     fun toCreatorStatement(fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String): Statement?
     fun addAltConstructor(typeSpecBuilder: Builder, dtoAltConstructorBuilder: FunSpec.Builder)
+    fun finalize(typeSpecBuilder: Builder)
 }
 
 
@@ -149,53 +159,107 @@ open class SimpleDtoMembersStrategy(
     }
 
     override fun toCreatorStatement(
-            fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String
+        fieldIndex: Int,
+        variableElement: VariableElement,
+        propertyName: String,
+        propertyType: TypeName,
+        commaOrEmpty: String
     ): Statement? {
         return Statement("      $propertyName = original.$propertyName$commaOrEmpty")
     }
 
+    override fun processDtoOnlyFields(
+        typeSpecBuilder: TypeSpec.Builder,
+        fields: List<VariableElement>
+    ) {
+        fields.forEachIndexed { fieldIndex, originalProperty ->
+            val (propertyName, propertyType) =
+                addProperty(originalProperty, fieldIndex, typeSpecBuilder)
+            fieldProcessed(fieldIndex, originalProperty, propertyName, propertyType)
+        }
+    }
+
     override fun processFields(
-            typeSpecBuilder: TypeSpec.Builder,
-            fields: List<VariableElement>) {
+        typeSpecBuilder: TypeSpec.Builder,
+        fields: List<VariableElement>
+    ) {
         fields.forEachIndexed { fieldIndex, originalProperty ->
             val commaOrEmpty = if (fieldIndex + 1 < fields.size) "," else ""
             // Tell KotlinPoet that the property is initialized via the constructor parameter,
             // by creating both a constructor param and member property
-            val propertyName = toPropertyName(originalProperty)
-            val propertyType = toPropertyTypeName(originalProperty)
-            val propertyDefaultValue = toDefaultValueExpression(originalProperty)
-            dtoConstructorBuilder.addParameter(ParameterSpec.builder(propertyName, propertyType)
-                    .defaultValue(propertyDefaultValue)
-                    .build())
-            val propertySpecBuilder = toPropertySpecBuilder(fieldIndex, originalProperty, propertyName, propertyType)
-            addPropertyAnnotations(propertySpecBuilder, originalProperty)
-            typeSpecBuilder.addProperty(propertySpecBuilder.build())
+            val (propertyName, propertyType) = addProperty(originalProperty, fieldIndex, typeSpecBuilder)
             // TODO: just separate and decouple the darn component builders already
             // Add line to patch function
             patchFunctionCodeBuilder.addStatement(toPatchStatement(fieldIndex, originalProperty, commaOrEmpty))
             // Add line to map function
-            targetTypeFunctionCodeBuilder.addStatement(toTargetTypeStatement(fieldIndex, originalProperty, commaOrEmpty))
+            targetTypeFunctionCodeBuilder.addStatement(
+                toTargetTypeStatement(
+                    fieldIndex,
+                    originalProperty,
+                    commaOrEmpty
+                )
+            )
             // Add line to alt constructor
-            dtoAltConstructorCodeBuilder.addStatement(toAltConstructorStatement(fieldIndex, originalProperty, propertyName, propertyType, commaOrEmpty))
+            dtoAltConstructorCodeBuilder.addStatement(
+                toAltConstructorStatement(
+                    fieldIndex,
+                    originalProperty,
+                    propertyName,
+                    propertyType,
+                    commaOrEmpty
+                )
+            )
             // Add line to create
-            creatorFunctionCodeBuilder.addStatement(toCreatorStatement(fieldIndex, originalProperty, propertyName, propertyType, commaOrEmpty))
+            creatorFunctionCodeBuilder.addStatement(
+                toCreatorStatement(
+                    fieldIndex,
+                    originalProperty,
+                    propertyName,
+                    propertyType,
+                    commaOrEmpty
+                )
+            )
             //
             fieldProcessed(fieldIndex, originalProperty, propertyName, propertyType)
         }
-        finalize(typeSpecBuilder)
+    }
+
+    protected fun addProperty(
+        originalProperty: VariableElement,
+        fieldIndex: Int,
+        typeSpecBuilder: Builder
+    ): Pair<String, TypeName> {
+        val propertyName = toPropertyName(originalProperty)
+        val propertyType = toPropertyTypeName(originalProperty)
+        val propertyDefaultValue = toDefaultValueExpression(originalProperty)
+        dtoConstructorBuilder.addParameter(
+            ParameterSpec.builder(propertyName, propertyType)
+                .defaultValue(propertyDefaultValue)
+                .build()
+        )
+        val propertySpecBuilder = toPropertySpecBuilder(fieldIndex, originalProperty, propertyName, propertyType)
+        addPropertyAnnotations(propertySpecBuilder, originalProperty)
+        typeSpecBuilder.addProperty(propertySpecBuilder.build())
+        return Pair(propertyName, propertyType)
     }
 
     /** Override to add additional functionality to your [DtoMembersStrategy] implementation */
-    override fun fieldProcessed(fieldIndex: Int, originalProperty: VariableElement, propertyName: String, propertyType: TypeName) {
+    override fun fieldProcessed(
+        fieldIndex: Int,
+        originalProperty: VariableElement,
+        propertyName: String,
+        propertyType: TypeName
+    ) {
         // NO-OP
     }
 
     override fun toPropertySpecBuilder(
-            fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName
+        fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName
     ): PropertySpec.Builder = PropertySpec.builder(propertyName, propertyType)
-                .mutable()
+        .mutable()
                 .addModifiers(PUBLIC)
                 .initializer(propertyName)
+
 
     // Create DTO alternative constructor
     override fun getAltConstructorBuilder() = FunSpec.constructorBuilder().addParameter(originalTypeParameter)
@@ -227,14 +291,14 @@ open class SimpleDtoMembersStrategy(
         return toStateFunctionBuilder
     }
 
-    protected open fun finalize(typeSpecBuilder: TypeSpec.Builder) {
+    override fun finalize(typeSpecBuilder: TypeSpec.Builder) {
         // Complete alt constructor
         val dtoAltConstructorBuilder = getAltConstructorBuilder()
-                .callThisConstructor(dtoAltConstructorCodeBuilder.build())
+            .callThisConstructor(dtoAltConstructorCodeBuilder.build())
         addAltConstructor(typeSpecBuilder, dtoAltConstructorBuilder)
         // Complete creator function
 
-        // Complete patch function
+        // Complete creator function
         creatorFunctionCodeBuilder.addStatement(")")
         //creatorFunctionCodeBuilder.addStatement("return dto")
         // Complete patch function

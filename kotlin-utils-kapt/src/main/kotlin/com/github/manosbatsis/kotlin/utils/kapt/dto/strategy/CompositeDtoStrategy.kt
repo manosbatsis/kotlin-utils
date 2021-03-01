@@ -1,6 +1,6 @@
-package com.github.manotbatsis.kotlin.utils.kapt.dto.strategy
+package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy
 
-import com.github.manotbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
+import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeSpec.Builder
 import com.squareup.kotlinpoet.TypeVariableName
@@ -47,11 +47,21 @@ open class CompositeDtoStrategy(
     /** Process original type fields and add DTO members */
     override fun addMembers(typeSpecBuilder: Builder) {
         dtoMembersStrategy.processFields(typeSpecBuilder, getFieldsToProcess())
+        dtoMembersStrategy.processDtoOnlyFields(typeSpecBuilder, getFieldsFromMixin())
+        dtoMembersStrategy.finalize(typeSpecBuilder)
     }
 
+    override fun getIgnoredFieldNames(): List<String> =
+        annotatedElementInfo.ignoreProperties
+
     override fun getFieldsToProcess(): List<VariableElement> =
-            annotatedElementInfo.primaryTargetTypeElementFields
-                    .filterNot { annotatedElementInfo.ignoreProperties.contains(it.simpleName.toString()) }
+        annotatedElementInfo.primaryTargetTypeElementFields
+            .excludeNames(getIgnoredFieldNames())
+
+    override fun getFieldsFromMixin(): List<VariableElement> =
+        annotatedElementInfo.primaryTargetTypeElementFields.toSimpleNames()
+            .plus(getIgnoredFieldNames())
+            .let { annotatedElementInfo.mixinTypeElementFields.excludeNames(it) }
 
 
 }

@@ -1,8 +1,8 @@
-package com.github.manotbatsis.kotlin.utils.kapt.dto.strategy
+package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy
 
 import com.github.manosbatsis.kotlin.utils.ProcessingEnvironmentAware
-import com.github.manotbatsis.kotlin.utils.api.Dto
-import com.github.manotbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
+import com.github.manosbatsis.kotlin.utils.api.Dto
+import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 import com.squareup.kotlinpoet.KModifier.DATA
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.TypeSpec.Builder

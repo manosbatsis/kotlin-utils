@@ -1,4 +1,4 @@
-package com.github.manotbatsis.kotlin.utils.kapt.dto
+package com.github.manosbatsis.kotlin.utils.kapt.dto
 
 interface DtoInputContextAware {
 

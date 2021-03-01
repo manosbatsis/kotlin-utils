@@ -1,4 +1,4 @@
-package com.github.manotbatsis.kotlin.utils.kapt.dto.strategy
+package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy
 
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeSpec.Builder
@@ -22,4 +22,15 @@ interface DtoStrategy  {
 
     /** Override to modify the fields to process, i.e. replicate for the DTO */
     fun getFieldsToProcess(): List<VariableElement>
+
+    /** Override to modify the mixin fields added to the DTO */
+    fun getFieldsFromMixin(): List<VariableElement>
+
+    fun List<VariableElement>.excludeNames(excluded: List<String> = emptyList()) =
+        filterNot { excluded.contains(it.simpleName.toString()) }
+
+    fun List<VariableElement>.toSimpleNames(excluded: List<String> = emptyList()) =
+        excludeNames(excluded).map { it.simpleName.toString() }
+
+    fun getIgnoredFieldNames(): List<String>
 }

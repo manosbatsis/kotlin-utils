@@ -1,7 +1,7 @@
-package com.github.manotbatsis.kotlin.utils.kapt.dto
+package com.github.manosbatsis.kotlin.utils.kapt.dto
 
-import com.github.manotbatsis.kotlin.utils.kapt.dto.strategy.CompositeDtoStrategy
-import com.github.manotbatsis.kotlin.utils.kapt.dto.strategy.DtoStrategy
+import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.CompositeDtoStrategy
+import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.DtoStrategy
 import com.squareup.kotlinpoet.asTypeName
 import javax.annotation.processing.ProcessingEnvironment
 import javax.lang.model.element.TypeElement

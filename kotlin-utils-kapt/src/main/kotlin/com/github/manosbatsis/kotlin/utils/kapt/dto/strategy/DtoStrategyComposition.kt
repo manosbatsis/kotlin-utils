@@ -1,6 +1,6 @@
-package com.github.manotbatsis.kotlin.utils.kapt.dto.strategy
+package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy
 
-import com.github.manotbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
+import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 
 interface DtoStrategyComposition {
     val annotatedElementInfo: AnnotatedElementInfo

@@ -1,7 +1,7 @@
 package com.github.manosbatsis.kotlin.utils
 
-import com.github.manotbatsis.kotlin.utils.kapt.dto.DtoInputContext
-import com.github.manotbatsis.kotlin.utils.kapt.dto.strategy.DtoMembersStrategy.Statement
+import com.github.manosbatsis.kotlin.utils.kapt.dto.DtoInputContext
+import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.DtoMembersStrategy.Statement
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
@@ -144,13 +144,23 @@ interface ProcessingEnvironmentAware {
         return if (this.isNullable()) typeName.copy(nullable = true) else typeName
     }
 
+    fun TypeName.asKotlinTypeName(): TypeName {
+        return if (this is ParameterizedTypeName) {
+            val className = rawType.asKotlinTypeName() as ClassName
+            className.parameterizedBy(*typeArguments.map { it.asKotlinTypeName() }.toTypedArray())
+        } else {
+            processingEnvironment.elementUtils.getTypeElement(this.toString())
+                .asKotlinClassName()
+        }
+    }
+
     /** Converts this TypeMirror to a [TypeName], ensuring that java types such as [java.lang.String] are converted to their Kotlin equivalent. */
     fun TypeMirror.asKotlinTypeName(): TypeName {
         return when (this) {
             is PrimitiveType -> processingEnvironment.typeUtils.boxedClass(this as PrimitiveType?).asKotlinClassName()
             is ArrayType -> {
                 return ClassName("kotlin", "Array")
-                        .parameterizedBy(this.componentType.asKotlinTypeName())
+                    .parameterizedBy(this.componentType.asKotlinTypeName())
             }
             is DeclaredType -> {
                 val typeName = this.asTypeElement().asKotlinClassName()

@@ -1,4 +1,4 @@
-package com.github.manotbatsis.kotlin.utils.kapt.processor
+package com.github.manosbatsis.kotlin.utils.kapt.processor
 
 import java.io.File
 import javax.annotation.processing.ProcessingEnvironment

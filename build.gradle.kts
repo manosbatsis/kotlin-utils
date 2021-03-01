@@ -2,13 +2,14 @@ import de.marcphilipp.gradle.nexus.NexusPublishExtension
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 object Versions {
+    const val jackson = "2.9.0"
     const val kotlin = "1.2.71"
     const val kotlinpoet = "1.5.0"
     const val dokka = "0.9.18"
 
     /* test */
-    const val junit = "5.1.1"
-    const val jupiter = "5.3.1"
+    const val junit = "5.6.2"
+    const val jupiter = "5.6.2"
     const val kotlintest = "3.1.10"
 }
 
@@ -34,15 +35,16 @@ apply<IdeaPlugin>()
 
 allprojects {
     group = "com.github.manosbatsis.kotlin-utils"
-    version = "0.20"
     description = "Kotlin Utilities"
 
     repositories {
         mavenLocal()
         jcenter()
         mavenCentral()
+
     }
 
+    apply(plugin = "idea")
     // convenient report on all dependencies
     task<DependencyReportTask>("allDeps") {}
 }
@@ -64,6 +66,9 @@ subprojects {
         testImplementation("org.jetbrains.kotlin:kotlin-test:${Versions.kotlin}")
         // Use the Kotlin JUnit integration.
         testImplementation("org.jetbrains.kotlin:kotlin-test-junit:${Versions.kotlin}")
+        testImplementation("org.junit.jupiter:junit-jupiter-api:${Versions.jupiter}")
+        testImplementation("org.junit.jupiter:junit-jupiter-engine:${Versions.jupiter}")
+        testImplementation("org.junit.jupiter:junit-jupiter-params:${Versions.jupiter}")
     }
 
     configure<NexusPublishExtension> {
@@ -87,8 +92,10 @@ subprojects {
 
     val sourceSets = the<SourceSetContainer>()
     sourceSets {
-        getByName("main").java.srcDirs("src/main/kotlin")
-        getByName("test").java.srcDirs("src/main/kotlin")
+        getByName("main")
+            .java.srcDirs("src/main/kotlin", "build/generated/source/kaptKotlin/main")
+        getByName("test")
+            .java.srcDirs("src/test/kotlin")
     }
 
 

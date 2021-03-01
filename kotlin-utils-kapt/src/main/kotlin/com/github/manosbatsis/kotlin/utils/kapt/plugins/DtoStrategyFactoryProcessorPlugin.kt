@@ -1,7 +1,7 @@
-package com.github.manotbatsis.kotlin.utils.kapt.plugins
+package com.github.manosbatsis.kotlin.utils.kapt.plugins
 
-import com.github.manotbatsis.kotlin.utils.kapt.dto.strategy.DtoStrategy
-import com.github.manotbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
+import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.DtoStrategy
+import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 
 
 interface DtoStrategyFactoryProcessorPlugin : AnnotationProcessorPlugin {
