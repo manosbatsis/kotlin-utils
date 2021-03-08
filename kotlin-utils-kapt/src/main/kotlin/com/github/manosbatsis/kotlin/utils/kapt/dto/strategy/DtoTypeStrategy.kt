@@ -34,9 +34,16 @@ open class SimpleDtoTypeStrategy(
 
     override val processingEnvironment = annotatedElementInfo.processingEnvironment
     override fun addAnnotations(typeSpecBuilder: Builder) {
-        typeSpecBuilder.copyAnnotationsByBasePackage(
-                annotatedElementInfo.primaryTargetTypeElement,
-                annotatedElementInfo.copyAnnotationPackages)
+        with(annotatedElementInfo) {
+            listOfNotNull(primaryTargetTypeElement, mixinTypeElement)
+                .forEach {
+                    typeSpecBuilder.copyAnnotationsByBasePackage(
+                        it, copyAnnotationPackages
+                    )
+                }
+
+        }
+
     }
 
     override fun addKdoc(typeSpecBuilder: Builder) {
