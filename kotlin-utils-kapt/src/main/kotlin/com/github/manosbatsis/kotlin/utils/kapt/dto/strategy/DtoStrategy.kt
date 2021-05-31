@@ -34,3 +34,4 @@ interface DtoStrategy  {
 
     fun getIgnoredFieldNames(): List<String>
 }
+

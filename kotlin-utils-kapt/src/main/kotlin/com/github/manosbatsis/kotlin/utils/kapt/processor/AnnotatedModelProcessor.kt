@@ -7,12 +7,7 @@ import java.io.File
 import javax.annotation.processing.AbstractProcessor
 import javax.annotation.processing.ProcessingEnvironment
 import javax.annotation.processing.RoundEnvironment
-import javax.lang.model.element.AnnotationMirror
-import javax.lang.model.element.Element
-import javax.lang.model.element.ElementKind
-import javax.lang.model.element.ExecutableElement
-import javax.lang.model.element.TypeElement
-import javax.lang.model.element.VariableElement
+import javax.lang.model.element.*
 import javax.lang.model.util.ElementFilter
 
 interface AnnotatedElementInfoProcessor : AnnotationProcessorBase{
@@ -30,8 +25,8 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
         val TYPE_PARAMETER_STAR = WildcardTypeName.producerOf(Any::class.asTypeName().copy(nullable = true))
     }
 
-    val primaryTargetRefAnnotationName: String
-    val secondaryTargetRefAnnotationName: String
+    val primaryTargetRefAnnotationName: String?
+    val secondaryTargetRefAnnotationName: String?
 
     val generatedSourcesRoot: String
     val sourceRootFile: File
@@ -93,11 +88,6 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
         return annotatedElements.flatMap { annotationGroup ->
             annotationGroup.value.map { annotatedElement ->
                 val annotation = annotatedElement.getAnnotationMirror(annotationGroup.key)
-
-                println("toAnnotatedElementInfos, annotatedElement: $annotatedElement")
-                println("toAnnotatedElementInfos, annotation key: ${annotationGroup.key}")
-                println("toAnnotatedElementInfos, annotation: $annotation")
-                println("toAnnotatedElementInfos, is mixin: ${isMixinAnnotation(annotationGroup.key.canonicalName)}")
                 when (annotatedElement.kind) {
                     ElementKind.CLASS -> {
                         val typeElement = annotatedElement as TypeElement
@@ -121,13 +111,15 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
                                 primaryTargetTypeElementFields = executableElement.parameters,
                                 annotation = annotation)
                     }
-                    else -> throw IllegalArgumentException( "Invalid element type, expected a class or constructor" )
+                    else -> throw IllegalArgumentException("Invalid element type, expected a class or constructor")
                 }
             }
         }
     }
+
     fun isMixinAnnotation(annotation: Class<Annotation>) = isMixinAnnotation(annotation.simpleName)
-    fun isMixinAnnotation(name: String): Boolean = name.endsWith("Mixin") || name.endsWith("ForDependency")
+    fun isMixinAnnotation(name: String): Boolean = primaryTargetRefAnnotationName != null
+            && (name.endsWith("Mixin") || name.endsWith("ForDependency"))
 
     fun annotatedElementInfo(
             primaryTargetTypeElement: TypeElement,
@@ -137,12 +129,11 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
             annotation: AnnotationMirror
     ): AnnotatedElementInfo {
 
-        println("annotatedElementInfo, primaryTargetTypeElement: $primaryTargetTypeElement")
-        println("toAnnotatedElementInfos, secondaryTargetRefAnnotationName: ${secondaryTargetRefAnnotationName}")
-        val secondaryTargetTypeElement: TypeElement? = annotation.findValueAsTypeElement(secondaryTargetRefAnnotationName)
+        val secondaryTargetTypeElement: TypeElement? = secondaryTargetRefAnnotationName?.let {
+            annotation.findValueAsTypeElement(it)
+        }
 
-        println("annotatedElementInfo, secondaryTargetTypeElement: $secondaryTargetTypeElement")
-        val secondaryTargetTypeElementFields = if(secondaryTargetTypeElement != null) ElementFilter.fieldsIn(
+        val secondaryTargetTypeElementFields = if (secondaryTargetTypeElement != null) ElementFilter.fieldsIn(
                 processingEnvironment.elementUtils.getAllMembers(secondaryTargetTypeElement)).fieldsOnly() else emptyList()
 
         return annotatedElementInfo(
@@ -161,7 +152,8 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
             mixinTypeElementFields: List<VariableElement>,
             annotation: AnnotationMirror
     ): AnnotatedElementInfo {
-        val primaryTargetTypeElement: TypeElement = annotation.getValueAsTypeElement(primaryTargetRefAnnotationName)
+        val annotationTargetTypeAttr = primaryTargetRefAnnotationName ?: error("Not a mixin")
+        val primaryTargetTypeElement: TypeElement = annotation.getValueAsTypeElement(annotationTargetTypeAttr)
         val primaryTargetTypeElementFields = ElementFilter.fieldsIn(
                 processingEnvironment.elementUtils.getAllMembers(primaryTargetTypeElement)).fieldsOnly()
         return annotatedElementInfo(
@@ -177,8 +169,8 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
 
 
 abstract class AbstractAnnotatedModelInfoProcessor(
-        override val primaryTargetRefAnnotationName: String,
-        override val secondaryTargetRefAnnotationName: String
+        override val primaryTargetRefAnnotationName: String?,
+        override val secondaryTargetRefAnnotationName: String?
 ): AbstractProcessor(), AnnotatedElementInfoProcessor{
 
     /** Implement [ProcessingEnvironment] access */
@@ -232,7 +224,9 @@ abstract class AbstractAnnotatedModelInfoProcessor(
             copyAnnotationPackages = copyAnnotationPackages,
             ignoreProperties = ignoreProperties,
             sourceRoot = sourceRootFile,
-            generatedPackageName = generatedPackageName
+            generatedPackageName = generatedPackageName,
+            isNonDataClass = annotation.findAnnotationValue("nonDataClass")?.value as Boolean?
+                    ?: false
     )
 
 

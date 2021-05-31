@@ -1,7 +1,7 @@
 package com.github.manosbatsis.kotlin.utils.kapt.plugins
 
 import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
-import java.util.ServiceLoader
+import java.util.*
 
 /** Used by annotation processor to load plugins */
 class AnnotationProcessorPluginService private constructor(
@@ -42,14 +42,11 @@ class AnnotationProcessorPluginService private constructor(
     ): T? {
         val candidates = findPlugins(serviceType).toMutableList()
 
-        println("AnnotationProcessorPluginService findPlugin for ${annotatedElementInfo.primaryTargetTypeElementSimpleName} ${serviceType.simpleName}, strategy: $strategy")
         candidates.sortBy {
             val priority = it.getSupportPriority(annotatedElementInfo, strategy)
-            println("AnnotationProcessorPluginService findPlugin matched ${it.javaClass.simpleName} with priority: $priority")
             priority
         }
         val selected = candidates.lastOrNull()
-        println("AnnotationProcessorPluginService findPlugin selected: $selected")
         return selected
     }
 

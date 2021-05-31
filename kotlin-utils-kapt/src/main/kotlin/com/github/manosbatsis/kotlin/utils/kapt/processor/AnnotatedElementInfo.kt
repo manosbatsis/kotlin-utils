@@ -23,6 +23,10 @@ interface AnnotatedElementInfo {
     val primaryTargetTypeElementSimpleName: String
     val secondaryTargetTypeElementSimpleName: String?
     val mixinTypeElementSimpleName: String?
+    var overrideClassNameSuffix: String?
+    var overrideClassName: String?
+    val skipToTargetTypeFunction: Boolean
+    val isNonDataClass: Boolean
 }
 
 data class SimpleAnnotatedElementInfo(
@@ -38,9 +42,14 @@ data class SimpleAnnotatedElementInfo(
         override val ignoreProperties: List<String>,
         override val generatedPackageName: String,
         override val sourceRoot: File,
-        override val primaryTargetTypeElementSimpleName: String =  primaryTargetTypeElement.simpleName.toString(),
-        override val secondaryTargetTypeElementSimpleName: String? =  secondaryTargetTypeElement?.simpleName.toString(),
-        override val mixinTypeElementSimpleName: String? =  mixinTypeElement?.simpleName.toString()
+        override val primaryTargetTypeElementSimpleName: String = primaryTargetTypeElement.simpleName.toString(),
+        override val secondaryTargetTypeElementSimpleName: String? = secondaryTargetTypeElement?.simpleName.toString(),
+        override val mixinTypeElementSimpleName: String? = mixinTypeElement?.simpleName.toString(),
+        override var overrideClassNameSuffix: String? = null,
+        override var overrideClassName: String? = null,
+        override val skipToTargetTypeFunction: Boolean = false,
+        override val isNonDataClass: Boolean
+
 ) : AnnotatedElementInfo{
     init {
         if(primaryTargetTypeElementSimpleName == secondaryTargetTypeElementSimpleName)

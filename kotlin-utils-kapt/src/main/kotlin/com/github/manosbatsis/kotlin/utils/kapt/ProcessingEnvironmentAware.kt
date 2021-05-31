@@ -1,7 +1,7 @@
 package com.github.manosbatsis.kotlin.utils
 
 import com.github.manosbatsis.kotlin.utils.kapt.dto.DtoInputContext
-import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.DtoMembersStrategy.Statement
+import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.composition.DtoMembersStrategy.Statement
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
@@ -302,38 +302,7 @@ interface ProcessingEnvironmentAware {
     /** Get the given annotation's value if it exists, null otherwise */
     fun Element.findAnnotationValue(annotation: Class<out Annotation>, propertyName: String): AnnotationValue? =
             this.findAnnotationMirror(annotation)?.findAnnotationValue(propertyName)
-/*
-String key = entry.getKey().getSimpleName().toString();
-                Object value = entry.getValue().getValue();
-                switch (key) {
-                    case "intValue":
-                        int intVal = (Integer) value;
-                        System.out.printf(">> intValue: %d\n", intVal);
-                        break;
-                    case "stringValue":
-                        String strVal = (String) value;
-                        System.out.printf(">> stringValue: %s\n", strVal);
-                        break;
-                    case "enumValue":
-                        VariableElement enumVal = ((VariableElement) value);
-                        System.out.printf(">> enumValue: %s\n", enumVal.getSimpleName());
-                        break;
-                    case "annotationTypeValue":
-                        AnnotationMirror anoTypeVal = (AnnotationMirror) value;
-                        System.out.printf(">> annotationTypeValue: %s\n", anoTypeVal.toString());
-                        break;
-                    case "classValue":
-                        TypeMirror typeMirror = (TypeMirror) value;
-                        System.out.printf(">> classValue: %s\n", typeMirror.toString());
-                        break;
-                    case "classesValue":
-                        List<? extends AnnotationValue> typeMirrors
-                            = (List<? extends AnnotationValue>) value;
-                        System.out.printf(">> classesValue: %s\n",
-                            ((TypeMirror) typeMirrors.get(0).getValue()).toString());
-                        break;
-                }
- */
+
     /** Get the given annotation value as a [TypeElement] if it exists, null otherwise */
     fun AnnotationMirror.findValueAsTypeElement(propertyName: String): TypeElement? {
         val annotationMirrorValue = this.findValueAsTypeMirror(propertyName) ?: return null
@@ -376,9 +345,15 @@ String key = entry.getKey().getSimpleName().toString();
         return findAnnotationValue(memberName)?.value as List<AnnotationValue>?
     }
 
+    /** Get the given annotation value as a list of [AnnotationValue] if it exists, null otherwise */
+    fun AnnotationMirror.getAnnotationValueList(memberName: String): List<AnnotationValue> {
+        return getAnnotationValue(memberName).value as List<AnnotationValue>?
+                ?: error("Cound not find a non-null value for annotation member $memberName")
+    }
+
     /** Get the given annotation value as a `List<String>` if it exists, null otherwise */
     fun AnnotationMirror.findAnnotationValueListString(memberName: String): List<String>? {
-        return findAnnotationValueList(memberName)?.map{ it.value.toString() }
+        return findAnnotationValueList(memberName)?.map { it.value.toString() }
     }
 
     /** Get the given annotation value as a `List<VariableElement>`if it exists, null otherwise */
