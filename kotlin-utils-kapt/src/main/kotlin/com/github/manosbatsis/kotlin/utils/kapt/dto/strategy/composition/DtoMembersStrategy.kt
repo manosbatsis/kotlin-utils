@@ -55,6 +55,9 @@ interface DtoMembersStrategy : ProcessingEnvironmentAware {
     fun toCreatorStatement(fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String): Statement?
     fun addAltConstructor(typeSpecBuilder: Builder, dtoAltConstructorBuilder: FunSpec.Builder)
     fun finalize(typeSpecBuilder: Builder)
+    fun toTargetTypeOrPachStatement(fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String): Statement?
+    fun addProperty(originalProperty: VariableElement, fieldIndex: Int, typeSpecBuilder: Builder): Pair<String, TypeName>
+    fun findDefaultValueAnnotationValue(variableElement: VariableElement): String?
 }
 
 

@@ -1,5 +1,7 @@
 package com.github.manosbatsis.kotlin.utils.kapt.processor
 
+import com.squareup.kotlinpoet.ParameterSpec
+import com.squareup.kotlinpoet.TypeName
 import java.io.File
 import javax.annotation.processing.ProcessingEnvironment
 import javax.lang.model.element.AnnotationMirror
@@ -25,9 +27,18 @@ interface AnnotatedElementInfo {
     val mixinTypeElementSimpleName: String?
     var overrideClassNameSuffix: String?
     var overrideClassName: String?
-    val skipToTargetTypeFunction: Boolean
+    var overrideDtoInterface: Class<*>?
+    val toTargetTypeFunctionConfig: ToTargetTypeFunctionConfig
     val isNonDataClass: Boolean
 }
+
+data class ToTargetTypeFunctionConfig(
+        val skip: Boolean = false,
+        val patchStatements: Boolean = false,
+        val name: String = "toTargetType",
+        val params: List<ParameterSpec> = emptyList(),
+        val targetTypeNameOverride: TypeName? = null
+)
 
 data class SimpleAnnotatedElementInfo(
         override val processingEnvironment: ProcessingEnvironment,
@@ -47,7 +58,8 @@ data class SimpleAnnotatedElementInfo(
         override val mixinTypeElementSimpleName: String? = mixinTypeElement?.simpleName.toString(),
         override var overrideClassNameSuffix: String? = null,
         override var overrideClassName: String? = null,
-        override val skipToTargetTypeFunction: Boolean = false,
+        override var overrideDtoInterface: Class<*>? = null,
+        override val toTargetTypeFunctionConfig: ToTargetTypeFunctionConfig = ToTargetTypeFunctionConfig(),
         override val isNonDataClass: Boolean
 
 ) : AnnotatedElementInfo{

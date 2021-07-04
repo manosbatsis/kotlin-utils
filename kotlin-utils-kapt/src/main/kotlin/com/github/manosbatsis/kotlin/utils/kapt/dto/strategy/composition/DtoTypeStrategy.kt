@@ -1,8 +1,8 @@
 package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.composition
 
 import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
+import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec.Builder
-import javax.lang.model.element.TypeElement
 
 /**
  * Used by [DtoStrategyComposition] implementations to delegate
@@ -28,7 +28,7 @@ interface DtoTypeStrategy {
     fun getDtoInterface(): Class<*>
 
     /** Override to change how the DTO target type is resolved  */
-    fun getDtoTarget(): TypeElement
+    fun getDtoTarget(): TypeName
 }
 
 

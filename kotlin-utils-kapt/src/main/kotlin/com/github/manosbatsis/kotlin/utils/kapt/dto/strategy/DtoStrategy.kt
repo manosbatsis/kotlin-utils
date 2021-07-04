@@ -24,14 +24,23 @@ interface DtoStrategy  {
     fun getFieldsToProcess(): List<VariableElement>
 
     /** Override to modify the mixin fields added to the DTO */
-    fun getFieldsFromMixin(): List<VariableElement>
+    fun getExtraFieldsFromMixin(): List<VariableElement>
 
-    fun List<VariableElement>.excludeNames(excluded: List<String> = emptyList()) =
-        filterNot { excluded.contains(it.simpleName.toString()) }
+    /** The field names to include */
+    fun getFieldIncludes(): List<String> = emptyList()
 
-    fun List<VariableElement>.toSimpleNames(excluded: List<String> = emptyList()) =
-        excludeNames(excluded).map { it.simpleName.toString() }
+    /** The field names to exclude */
+    fun getFieldExcludes(): List<String> = emptyList()
 
-    fun getIgnoredFieldNames(): List<String>
+    fun List<VariableElement>.includeNames(includes: List<String> = emptyList()) =
+            if (includes.isEmpty()) this else filter { includes.contains(it.simpleName.toString()) }
+
+    fun List<VariableElement>.excludeNames(excludes: List<String> = emptyList()) =
+            if (excludes.isEmpty()) this else filterNot { excludes.contains(it.simpleName.toString()) }
+
+    fun List<VariableElement>.filtered() = includeNames(getFieldIncludes()).excludeNames(getFieldExcludes())
+
+    fun List<VariableElement>.toSimpleNames() = map { it.simpleName.toString() }
+
 }
 

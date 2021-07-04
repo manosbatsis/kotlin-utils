@@ -5,9 +5,9 @@ import com.github.manosbatsis.kotlin.utils.api.Dto
 import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.asClassName
-import javax.lang.model.element.TypeElement
 
 /** Simple implementation of [DtoTypeStrategy] */
 open class SimpleDtoTypeStrategy(
@@ -40,9 +40,9 @@ open class SimpleDtoTypeStrategy(
             getDtoInterface().asClassName().parameterizedBy(
                     annotatedElementInfo.primaryTargetTypeElement.asKotlinTypeName())
 
-    override fun getDtoInterface(): Class<*> = Dto::class.java
+    override fun getDtoInterface(): Class<*> = annotatedElementInfo.overrideDtoInterface ?: Dto::class.java
 
-    override fun getDtoTarget(): TypeElement = annotatedElementInfo.primaryTargetTypeElement
+    override fun getDtoTarget(): TypeName = annotatedElementInfo.primaryTargetTypeElement.asKotlinTypeName()
 
 
 }

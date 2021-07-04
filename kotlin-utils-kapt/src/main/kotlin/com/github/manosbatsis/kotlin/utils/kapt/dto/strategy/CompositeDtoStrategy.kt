@@ -21,5 +21,6 @@ open class CompositeDtoStrategy(
             composition.dtoTypeStrategy,
             composition.dtoMembersStrategy
     )
+
 }
 
