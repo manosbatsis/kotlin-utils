@@ -12,8 +12,8 @@ import javax.lang.model.element.VariableElement
  * processing related to the generated DTO members.
  */
 interface DtoMembersStrategy : ProcessingEnvironmentAware {
-    data class Statement(val format: String, val args: Array<Any?> = emptyArray())
 
+    data class Statement(val format: String, val args: List<Any> = emptyList())
 
     val annotatedElementInfo: AnnotatedElementInfo
     val dtoNameStrategy: DtoNameStrategy
@@ -43,7 +43,7 @@ interface DtoMembersStrategy : ProcessingEnvironmentAware {
     fun getToTargetTypeFunctionBuilder(): FunSpec.Builder
     fun toPropertyName(variableElement: VariableElement): String
     fun toPropertyTypeName(variableElement: VariableElement): TypeName
-    fun toDefaultValueExpression(variableElement: VariableElement): String
+    fun toDefaultValueExpression(variableElement: VariableElement): String?
     fun toTargetTypeStatement(fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String): Statement?
     fun toPatchStatement(fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String): Statement?
     fun toAltConstructorStatement(fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String): Statement?
@@ -55,9 +55,11 @@ interface DtoMembersStrategy : ProcessingEnvironmentAware {
     fun toCreatorStatement(fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String): Statement?
     fun addAltConstructor(typeSpecBuilder: Builder, dtoAltConstructorBuilder: FunSpec.Builder)
     fun finalize(typeSpecBuilder: Builder)
-    fun toTargetTypeOrPachStatement(fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String): Statement?
     fun addProperty(originalProperty: VariableElement, fieldIndex: Int, typeSpecBuilder: Builder): Pair<String, TypeName>
     fun findDefaultValueAnnotationValue(variableElement: VariableElement): String?
+    fun isNullable(variableElement: VariableElement, fieldContext: FieldContext): Boolean
+    fun isNonNull(variableElement: VariableElement, fieldContext: FieldContext): Boolean = !isNullable(variableElement, fieldContext)
+    fun maybeCheckForNull(variableElement: VariableElement, assignmentContext: AssignmentContext): String
 }
 
 

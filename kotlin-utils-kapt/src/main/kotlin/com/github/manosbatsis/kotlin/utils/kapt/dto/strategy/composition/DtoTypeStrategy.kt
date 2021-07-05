@@ -12,6 +12,8 @@ interface DtoTypeStrategy {
     /** The context object for annotation processing */
     val annotatedElementInfo: AnnotatedElementInfo
 
+    fun getRootDtoType(): TypeName
+
     /** Override to change the type-level annotations applied to the DTO  */
     fun addAnnotations(typeSpecBuilder: Builder)
 

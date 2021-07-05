@@ -21,6 +21,7 @@ dependencies {
     implementation("com.squareup:kotlinpoet:1.4.3")
     implementation("com.google.auto.service:auto-service:1.0-rc7")
     kapt("com.google.auto.service:auto-service:1.0-rc7")
+    implementation("org.jetbrains.kotlin:kotlin-reflect:1.2.71")
 
     //api ("com.thinkinglogic.builder:kotlin-builder-annotation:1.2.0") {
     //    exclude(group = "org.jetbrains.kotlin")

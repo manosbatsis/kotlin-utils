@@ -5,10 +5,12 @@ interface Dto<T : Any> {
 
     companion object {
         protected const val ERR_NULL = "Required property is null: "
+        inline fun errNull(fieldName: String): Nothing =
+                throw IllegalArgumentException("${ERR_NULL}$fieldName")
     }
 
-    fun <X> errNull(fieldName: String): X =
-            throw IllegalArgumentException("$ERR_NULL$fieldName")
+
+    fun errNull(fieldName: String): Nothing = Dto.errNull(fieldName)
 
     /**
      * Create a patched copy of the given [T] instance,

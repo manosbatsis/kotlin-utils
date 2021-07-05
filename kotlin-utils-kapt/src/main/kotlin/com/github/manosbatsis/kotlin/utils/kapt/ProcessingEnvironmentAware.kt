@@ -401,7 +401,7 @@ Note: getDtoStrategies, it: com.github.manosbatsis.vaultaire.annotation.Vaultair
     }
 
     fun CodeBlock.Builder.addStatement(statement: Statement?): CodeBlock.Builder {
-        if (statement != null) addStatement(statement.format, *statement.args)
+        if (statement != null) addStatement(statement.format, *statement.args.toTypedArray())
         return this
     }
 

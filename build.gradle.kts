@@ -21,6 +21,7 @@ object Versions {
 
 plugins {
     // Apply the Kotlin JVM plugin to add support for Kotlin on the JVM.
+    java
     id("org.jetbrains.kotlin.jvm") version "1.2.71"
     id("org.jetbrains.dokka") version "0.9.16"
     maven
@@ -45,13 +46,25 @@ allprojects {
     }
 
     apply(plugin = "idea")
+    apply(plugin = "java")
     // convenient report on all dependencies
     task<DependencyReportTask>("allDeps") {}
+
+    configurations.all {
+        resolutionStrategy {
+            eachDependency {
+                // Force dependencies to use the same version of as Kotlin as we.
+                if (requested.group == "org.jetbrains.kotlin") {
+                    useVersion(Versions.kotlin)
+                }
+            }
+        }
+    }
+
 }
 
 subprojects {
     apply(plugin = "maven")
-    apply(plugin = "java")
     apply(plugin = "kotlin")
     apply(plugin = "org.jetbrains.dokka")
     apply(plugin = "signing")
@@ -61,7 +74,7 @@ subprojects {
         // Use the Kotlin JDK 8 standard and reflection libs
         implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:${Versions.kotlin}")
         implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:${Versions.kotlin}")
-        implementation("org.jetbrains.kotlin:kotlin-reflect:${Versions.kotlin}")
+        compile("org.jetbrains.kotlin:kotlin-reflect:${Versions.kotlin}")
         // Use the Kotlin test library.
         testImplementation("org.jetbrains.kotlin:kotlin-test:${Versions.kotlin}")
         // Use the Kotlin JUnit integration.

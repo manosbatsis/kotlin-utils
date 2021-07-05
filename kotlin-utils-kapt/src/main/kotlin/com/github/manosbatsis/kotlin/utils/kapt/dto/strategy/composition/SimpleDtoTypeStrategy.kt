@@ -3,11 +3,8 @@ package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.composition
 import com.github.manosbatsis.kotlin.utils.ProcessingEnvironmentAware
 import com.github.manosbatsis.kotlin.utils.api.Dto
 import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
-import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
-import com.squareup.kotlinpoet.TypeName
-import com.squareup.kotlinpoet.TypeSpec
-import com.squareup.kotlinpoet.asClassName
 
 /** Simple implementation of [DtoTypeStrategy] */
 open class SimpleDtoTypeStrategy(
@@ -15,6 +12,8 @@ open class SimpleDtoTypeStrategy(
 ) : DtoTypeStrategy, ProcessingEnvironmentAware {
 
     override val processingEnvironment by lazy { annotatedElementInfo.processingEnvironment }
+
+    override fun getRootDtoType(): TypeName = Dto::class.java.asTypeName()
 
     override fun addAnnotations(typeSpecBuilder: TypeSpec.Builder) {
         with(annotatedElementInfo) {

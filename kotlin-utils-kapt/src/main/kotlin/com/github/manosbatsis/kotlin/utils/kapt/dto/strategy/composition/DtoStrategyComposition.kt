@@ -48,6 +48,14 @@ interface DtoStrategyComposition : DtoStrategyLesserComposition, DtoMembersStrat
                     .let { annotatedElementInfo.mixinTypeElementFields.excludeNames(it) }
 
     // DtoMembersStrategy
+    override fun maybeCheckForNull(
+            variableElement: VariableElement,
+            assignmentContext: AssignmentContext
+    ): String = dtoMembersStrategy.maybeCheckForNull(variableElement, assignmentContext)
+
+    override fun isNullable(variableElement: VariableElement, fieldContext: FieldContext): Boolean =
+            dtoMembersStrategy.isNullable(variableElement, fieldContext)
+
     /** Override to modify processing of individual fields */
     override fun processFields(typeSpecBuilder: TypeSpec.Builder, fields: List<VariableElement>) =
             dtoMembersStrategy.processFields(typeSpecBuilder, fields)
@@ -77,7 +85,7 @@ interface DtoStrategyComposition : DtoStrategyLesserComposition, DtoMembersStrat
     override fun toPropertyTypeName(variableElement: VariableElement): TypeName =
             dtoMembersStrategy.toPropertyTypeName(variableElement)
 
-    override fun toDefaultValueExpression(variableElement: VariableElement): String =
+    override fun toDefaultValueExpression(variableElement: VariableElement): String? =
             dtoMembersStrategy.toDefaultValueExpression(variableElement)
 
     override fun toTargetTypeStatement(
@@ -120,9 +128,6 @@ interface DtoStrategyComposition : DtoStrategyLesserComposition, DtoMembersStrat
 
     override fun finalize(typeSpecBuilder: TypeSpec.Builder) = dtoMembersStrategy.finalize(typeSpecBuilder)
 
-    override fun toTargetTypeOrPachStatement(
-            fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String
-    ): DtoMembersStrategy.Statement? = dtoMembersStrategy.toTargetTypeOrPachStatement(fieldIndex, variableElement, commaOrEmpty)
 
     override fun addProperty(
             originalProperty: VariableElement, fieldIndex: Int, typeSpecBuilder: TypeSpec.Builder
