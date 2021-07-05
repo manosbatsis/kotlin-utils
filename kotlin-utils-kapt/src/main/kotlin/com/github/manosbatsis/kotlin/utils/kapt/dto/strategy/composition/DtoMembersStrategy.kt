@@ -1,6 +1,8 @@
 package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.composition
 
 import com.github.manosbatsis.kotlin.utils.ProcessingEnvironmentAware
+import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util.AssignmentContext
+import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util.FieldContext
 import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.TypeSpec.Builder
@@ -43,7 +45,7 @@ interface DtoMembersStrategy : ProcessingEnvironmentAware {
     fun getToTargetTypeFunctionBuilder(): FunSpec.Builder
     fun toPropertyName(variableElement: VariableElement): String
     fun toPropertyTypeName(variableElement: VariableElement): TypeName
-    fun toDefaultValueExpression(variableElement: VariableElement): String?
+    fun toDefaultValueExpression(variableElement: VariableElement): Pair<String, Boolean>?
     fun toTargetTypeStatement(fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String): Statement?
     fun toPatchStatement(fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String): Statement?
     fun toAltConstructorStatement(fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String): Statement?
@@ -56,10 +58,10 @@ interface DtoMembersStrategy : ProcessingEnvironmentAware {
     fun addAltConstructor(typeSpecBuilder: Builder, dtoAltConstructorBuilder: FunSpec.Builder)
     fun finalize(typeSpecBuilder: Builder)
     fun addProperty(originalProperty: VariableElement, fieldIndex: Int, typeSpecBuilder: Builder): Pair<String, TypeName>
-    fun findDefaultValueAnnotationValue(variableElement: VariableElement): String?
+    fun findDefaultValueAnnotationValue(variableElement: VariableElement): Pair<String, Boolean>?
     fun isNullable(variableElement: VariableElement, fieldContext: FieldContext): Boolean
     fun isNonNull(variableElement: VariableElement, fieldContext: FieldContext): Boolean = !isNullable(variableElement, fieldContext)
-    fun maybeCheckForNull(variableElement: VariableElement, assignmentContext: AssignmentContext): String
+    fun maybeCheckForNull(variableElement: VariableElement, assignmentContext: AssignmentContext): AssignmentContext
 }
 
 

@@ -32,5 +32,6 @@ interface Dto<T : Any> {
 @Retention(AnnotationRetention.SOURCE)
 @Target(AnnotationTarget.FIELD)
 annotation class DefaultValue(
-        val value: String
+        val value: String,
+        val nullable: Boolean = false
 )

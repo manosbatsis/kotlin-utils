@@ -2,6 +2,8 @@ package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.composition
 
 import com.github.manosbatsis.kotlin.utils.ProcessingEnvironmentAware
 import com.github.manosbatsis.kotlin.utils.api.DefaultValue
+import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util.AssignmentContext
+import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util.FieldContext
 import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 import com.squareup.kotlinpoet.*
 import javax.annotation.processing.ProcessingEnvironment
@@ -72,7 +74,7 @@ open class SimpleDtoMembersStrategy(
 
 
     protected fun assignmentCtxForToAltConstructor(propertyName: String): AssignmentContext =
-            AssignmentContext.IN.withFallbackValue("?: %T.errNull(\"$propertyName\")")
+            AssignmentContext.IN.withFallbackValue(" ?: %T.errNull(\"$propertyName\")")
                     .withFallbackArg(getRootDtoTypeFromRootStrategy())
 
     protected fun assignmentCtxForOwnCreator(propertyName: String): AssignmentContext =
@@ -110,7 +112,7 @@ open class SimpleDtoMembersStrategy(
     override fun toPropertyTypeName(variableElement: VariableElement): TypeName =
             variableElement.asKotlinTypeName().copy(nullable = true)
 
-    override fun toDefaultValueExpression(variableElement: VariableElement): String? {
+    override fun toDefaultValueExpression(variableElement: VariableElement): Pair<String, Boolean>? {
         val mixinVariableElement = annotatedElementInfo.mixinTypeElementFields
                 .find { it.simpleName == variableElement.simpleName }
 
@@ -118,34 +120,37 @@ open class SimpleDtoMembersStrategy(
                 .mapNotNull { rootDtoMembersStrategy.findDefaultValueAnnotationValue(it) }
                 .firstOrNull()
         // Null if nullable, no default value otherwise
-                ?: if (rootDtoMembersStrategy.toPropertyTypeName(variableElement).isNullable) "null" else null
+                ?: if (rootDtoMembersStrategy.toPropertyTypeName(variableElement).isNullable) Pair("null", true) else null
     }
 
-    override fun findDefaultValueAnnotationValue(variableElement: VariableElement): String? =
-            variableElement.findAnnotationValue(DefaultValue::class.java, "value")?.value?.toString()
+    override fun findDefaultValueAnnotationValue(variableElement: VariableElement): Pair<String, Boolean>? =
+            variableElement.findAnnotationMirror(DefaultValue::class.java)?.let {
+                it.findAnnotationValue("value")!!.value.toString() to
+                        it.findAnnotationValue("nullable")!!.value!!.toString().toBoolean()
+            }
 
 
     override fun toTargetTypeStatement(fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String): DtoMembersStrategy.Statement? {
         val propertyName = rootDtoMembersStrategy.toPropertyName(variableElement)
         val assignmentContext = assignmentCtxForToTargetType(propertyName)
         val maybeNullFallback = maybeCheckForNull(variableElement, assignmentContext)
-        return DtoMembersStrategy.Statement("      $propertyName = this.$propertyName$maybeNullFallback$commaOrEmpty", assignmentContext.fallbackArgs)
+        return DtoMembersStrategy.Statement("      $propertyName = this.$propertyName${maybeNullFallback.fallbackValue}$commaOrEmpty", maybeNullFallback.fallbackArgs)
     }
 
     override fun maybeCheckForNull(
             variableElement: VariableElement,
             assignmentContext: AssignmentContext
-    ): String {
+    ): AssignmentContext {
         val isSourceNotNull = rootDtoMembersStrategy.isNonNull(variableElement, assignmentContext.source)
         val isTargetNullable = rootDtoMembersStrategy.isNullable(variableElement, assignmentContext.target)
-        return if (isSourceNotNull || isTargetNullable) ""
-        else "${assignmentContext.fallbackValue}"
+        return if (isSourceNotNull || isTargetNullable) AssignmentContext.EMPTY
+        else assignmentContext
     }
 
     override fun isNullable(
             variableElement: VariableElement, fieldContext: FieldContext
     ): Boolean = when (fieldContext) {
-        FieldContext.GENERATED_TYPE -> true//rootDtoMembersStrategy.toPropertyTypeName(variableElement).isNullable
+        FieldContext.GENERATED_TYPE -> rootDtoMembersStrategy.toPropertyTypeName(variableElement).isNullable
         FieldContext.TARGET_TYPE -> variableElement.isNullable()
         FieldContext.MIXIN_TYPE -> true
     }
@@ -155,7 +160,7 @@ open class SimpleDtoMembersStrategy(
         val propertyName = rootDtoMembersStrategy.toPropertyName(variableElement)
         val assignmentContext = assignmentCtxForToPatched(propertyName)
         val maybeNullFallback = maybeCheckForNull(variableElement, assignmentContext)
-        return DtoMembersStrategy.Statement("      $propertyName = this.$propertyName$maybeNullFallback$commaOrEmpty")
+        return DtoMembersStrategy.Statement("      $propertyName = this.$propertyName${maybeNullFallback.fallbackValue}$commaOrEmpty")
     }
 
 
@@ -164,7 +169,7 @@ open class SimpleDtoMembersStrategy(
     ): DtoMembersStrategy.Statement? {
         val assignmentContext = assignmentCtxForToAltConstructor(propertyName)
         val maybeNullFallback = maybeCheckForNull(variableElement, assignmentContext)
-        return DtoMembersStrategy.Statement("      $propertyName = original.$propertyName$maybeNullFallback$commaOrEmpty")
+        return DtoMembersStrategy.Statement("      $propertyName = original.$propertyName${maybeNullFallback.fallbackValue}$commaOrEmpty", maybeNullFallback.fallbackArgs)
     }
 
     override fun toCreatorStatement(
@@ -176,7 +181,7 @@ open class SimpleDtoMembersStrategy(
     ): DtoMembersStrategy.Statement? {
         val assignmentContext = assignmentCtxForOwnCreator(propertyName)
         val maybeNullFallback = maybeCheckForNull(variableElement, assignmentContext)
-        return DtoMembersStrategy.Statement("      $propertyName = original.$propertyName$maybeNullFallback$commaOrEmpty")
+        return DtoMembersStrategy.Statement("      $propertyName = original.$propertyName${maybeNullFallback.fallbackValue}$commaOrEmpty", maybeNullFallback.fallbackArgs)
     }
 
     override fun processDtoOnlyFields(
@@ -239,11 +244,16 @@ open class SimpleDtoMembersStrategy(
             typeSpecBuilder: TypeSpec.Builder
     ): Pair<String, TypeName> {
         val propertyName = rootDtoMembersStrategy.toPropertyName(originalProperty)
-        val propertyType = rootDtoMembersStrategy.toPropertyTypeName(originalProperty)
-        val propertyDefaultValue = rootDtoMembersStrategy.toDefaultValueExpression(originalProperty)
+        val propertyDefaults = rootDtoMembersStrategy.toDefaultValueExpression(originalProperty)
+        val propertyType = rootDtoMembersStrategy
+                .toPropertyTypeName(originalProperty)
+                .let { propType ->
+                    if (propertyDefaults != null) propType.copy(nullable = propertyDefaults.second)
+                    else propType
+                }
         dtoConstructorBuilder.addParameter(
                 ParameterSpec.builder(propertyName, propertyType)
-                        .apply { propertyDefaultValue?.let { defaultValue(it) } }.build()
+                        .apply { propertyDefaults?.first?.let { defaultValue(it) } }.build()
         )
         val propertySpecBuilder = rootDtoMembersStrategy.toPropertySpecBuilder(fieldIndex, originalProperty, propertyName, propertyType)
         rootDtoMembersStrategy.addPropertyAnnotations(propertySpecBuilder, originalProperty)

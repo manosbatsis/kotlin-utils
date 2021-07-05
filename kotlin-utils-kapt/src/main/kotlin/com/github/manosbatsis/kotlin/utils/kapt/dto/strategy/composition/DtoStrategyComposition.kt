@@ -1,6 +1,8 @@
 package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.composition
 
 import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.DtoStrategy
+import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util.AssignmentContext
+import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util.FieldContext
 import com.squareup.kotlinpoet.*
 import javax.lang.model.element.VariableElement
 
@@ -51,7 +53,7 @@ interface DtoStrategyComposition : DtoStrategyLesserComposition, DtoMembersStrat
     override fun maybeCheckForNull(
             variableElement: VariableElement,
             assignmentContext: AssignmentContext
-    ): String = dtoMembersStrategy.maybeCheckForNull(variableElement, assignmentContext)
+    ): AssignmentContext = dtoMembersStrategy.maybeCheckForNull(variableElement, assignmentContext)
 
     override fun isNullable(variableElement: VariableElement, fieldContext: FieldContext): Boolean =
             dtoMembersStrategy.isNullable(variableElement, fieldContext)
@@ -85,7 +87,7 @@ interface DtoStrategyComposition : DtoStrategyLesserComposition, DtoMembersStrat
     override fun toPropertyTypeName(variableElement: VariableElement): TypeName =
             dtoMembersStrategy.toPropertyTypeName(variableElement)
 
-    override fun toDefaultValueExpression(variableElement: VariableElement): String? =
+    override fun toDefaultValueExpression(variableElement: VariableElement): Pair<String, Boolean>? =
             dtoMembersStrategy.toDefaultValueExpression(variableElement)
 
     override fun toTargetTypeStatement(
@@ -133,7 +135,7 @@ interface DtoStrategyComposition : DtoStrategyLesserComposition, DtoMembersStrat
             originalProperty: VariableElement, fieldIndex: Int, typeSpecBuilder: TypeSpec.Builder
     ): Pair<String, TypeName> = dtoMembersStrategy.addProperty(originalProperty, fieldIndex, typeSpecBuilder)
 
-    override fun findDefaultValueAnnotationValue(variableElement: VariableElement): String? =
+    override fun findDefaultValueAnnotationValue(variableElement: VariableElement): Pair<String, Boolean>? =
             dtoMembersStrategy.findDefaultValueAnnotationValue(variableElement)
 }
 

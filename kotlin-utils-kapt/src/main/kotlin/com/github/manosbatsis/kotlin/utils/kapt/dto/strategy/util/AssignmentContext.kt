@@ -1,4 +1,4 @@
-package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.composition
+package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util
 
 import com.squareup.kotlinpoet.TypeName
 
@@ -9,6 +9,7 @@ data class AssignmentContext(
         val fallbackArgs: List<Any> = emptyList()
 ) {
     companion object {
+        val EMPTY = AssignmentContext(FieldContext.GENERATED_TYPE, FieldContext.GENERATED_TYPE, "", emptyList())
         val IN = AssignmentContext(FieldContext.TARGET_TYPE, FieldContext.GENERATED_TYPE)
         val OUT = AssignmentContext(FieldContext.GENERATED_TYPE, FieldContext.TARGET_TYPE)
     }
