@@ -110,7 +110,7 @@ open class SimpleDtoMembersStrategy(
             variableElement.simpleName.toString()
 
     override fun toPropertyTypeName(variableElement: VariableElement): TypeName =
-            variableElement.asKotlinTypeName().copy(nullable = true)
+            variableElement.asKotlinTypeName().copy(nullable = defaultNullable())
 
     override fun toDefaultValueExpression(variableElement: VariableElement): Pair<String, Boolean>? {
         val mixinVariableElement = annotatedElementInfo.mixinTypeElementFields
@@ -274,7 +274,7 @@ open class SimpleDtoMembersStrategy(
     override fun toPropertySpecBuilder(
             fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName
     ): PropertySpec.Builder = PropertySpec.builder(propertyName, propertyType)
-            .mutable()
+            .mutable(defaultMutable())
             .addModifiers(KModifier.PUBLIC)
                 .initializer(propertyName)
 

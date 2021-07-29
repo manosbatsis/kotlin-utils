@@ -61,6 +61,7 @@ allprojects {
         }
     }
 
+
 }
 
 subprojects {
@@ -93,12 +94,13 @@ subprojects {
         }
     }
 
+
     tasks.withType<KotlinCompile> {
         kotlinOptions {
             jvmTarget = "1.8"
             languageVersion = "1.2"
             apiVersion = "1.2"
-            freeCompilerArgs = listOf("-Xjsr305=strict")
+            freeCompilerArgs = listOf("-Xjsr305=strict", "-java-parameters")
             javaParameters = true   // Useful for reflection.
         }
     }

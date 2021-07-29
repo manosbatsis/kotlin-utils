@@ -24,6 +24,10 @@ interface DtoMembersStrategy : ProcessingEnvironmentAware {
     override val processingEnvironment: ProcessingEnvironment
         get() = annotatedElementInfo.processingEnvironment
 
+
+    fun defaultNullable(): Boolean = true
+    fun defaultMutable(): Boolean = true
+
     /** Override to modify processing of individual fields */
     fun processFields(typeSpecBuilder: Builder, fields: List<VariableElement>)
 
