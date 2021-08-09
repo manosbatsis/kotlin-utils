@@ -61,7 +61,7 @@ interface DtoMembersStrategy : ProcessingEnvironmentAware {
     fun toCreatorStatement(fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String): Statement?
     fun addAltConstructor(typeSpecBuilder: Builder, dtoAltConstructorBuilder: FunSpec.Builder)
     fun finalize(typeSpecBuilder: Builder)
-    fun addProperty(originalProperty: VariableElement, fieldIndex: Int, typeSpecBuilder: Builder): Pair<String, TypeName>
+    fun addProperty(originalProperty: VariableElement, fieldIndex: Int, typeSpecBuilder: Builder, fields: List<VariableElement>): Pair<String, TypeName>
     fun findDefaultValueAnnotationValue(variableElement: VariableElement): Pair<String, Boolean>?
     fun isNullable(variableElement: VariableElement, fieldContext: FieldContext): Boolean
     fun isNonNull(variableElement: VariableElement, fieldContext: FieldContext): Boolean = !isNullable(variableElement, fieldContext)

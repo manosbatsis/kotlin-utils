@@ -132,8 +132,11 @@ interface DtoStrategyComposition : DtoStrategyLesserComposition, DtoMembersStrat
 
 
     override fun addProperty(
-            originalProperty: VariableElement, fieldIndex: Int, typeSpecBuilder: TypeSpec.Builder
-    ): Pair<String, TypeName> = dtoMembersStrategy.addProperty(originalProperty, fieldIndex, typeSpecBuilder)
+            originalProperty: VariableElement,
+            fieldIndex: Int,
+            typeSpecBuilder: TypeSpec.Builder,
+            fields: List<VariableElement>
+    ): Pair<String, TypeName> = dtoMembersStrategy.addProperty(originalProperty, fieldIndex, typeSpecBuilder, fields)
 
     override fun findDefaultValueAnnotationValue(variableElement: VariableElement): Pair<String, Boolean>? =
             dtoMembersStrategy.findDefaultValueAnnotationValue(variableElement)

@@ -16,6 +16,7 @@ import javax.lang.model.type.*
 import javax.lang.model.util.ElementFilter
 import javax.tools.Diagnostic.Kind.ERROR
 import javax.tools.Diagnostic.Kind.NOTE
+import kotlin.reflect.KClass
 
 
 /**
@@ -318,6 +319,12 @@ interface ProcessingEnvironmentAware {
         return this.asKotlinClassName().topLevelClassName().packageName
     }
 
+    /** Check if this type element is an interface */
+    fun TypeElement.isInterface(): Boolean {
+        return superclass.kind == TypeKind.NONE
+                && qualifiedName.toString() != java.lang.Object::class.java.canonicalName
+    }
+
     /** Get the given annotation's value as a [TypeElement] if it exists, throw an error otherwise */
     fun Element.getAnnotationValueAsTypeElement(annotation: Class<out Annotation>, propertyName: String): TypeElement? =
             this.findAnnotationValueAsTypeElement(annotation, propertyName)
@@ -332,14 +339,26 @@ interface ProcessingEnvironmentAware {
             this.findAnnotationMirror(annotation)?.findAnnotationValue(propertyName)
 
     /** Get the given annotation value as a [TypeElement] if it exists, null otherwise */
-    fun AnnotationMirror.findValueAsTypeElement(propertyName: String): TypeElement? {
-        val annotationMirrorValue = this.findValueAsTypeMirror(propertyName) ?: return null
+    fun AnnotationMirror.findValueAsTypeElement(memberName: String): TypeElement? {
+        val annotationMirrorValue = this.findValueAsTypeMirror(memberName) ?: return null
         return processingEnvironment.typeUtils.asElement(annotationMirrorValue) as TypeElement?
     }
 
+    /** Get the given annotation value as a [KClass] if it exists and available in the classpath, throw an error otherwise */
+    fun AnnotationMirror.getValueAsKClass(memberName: String): KClass<*> {
+        return this.findValueAsKClass(memberName)
+                ?: throw IllegalStateException("Could not find a valid value for $memberName")
+    }
+
+    /** Get the given annotation value as a [KClass] if it exists and available in the classpath, null otherwise */
+    fun AnnotationMirror.findValueAsKClass(memberName: String): KClass<*>? {
+        val baseFlowAnnotationValue = this.findAnnotationValue(memberName) ?: return null
+        return baseFlowAnnotationValue.value as KClass<*>
+    }
+
     /** Get the given annotation value as a [TypeElement] if it exists, null otherwise */
-    fun AnnotationMirror.findValueAsTypeMirror(propertyName: String): TypeMirror? {
-        val baseFlowAnnotationValue = this.findAnnotationValue(propertyName) ?: return null
+    fun AnnotationMirror.findValueAsTypeMirror(memberName: String): TypeMirror? {
+        val baseFlowAnnotationValue = this.findAnnotationValue(memberName) ?: return null
         return baseFlowAnnotationValue.value as TypeMirror
     }
 

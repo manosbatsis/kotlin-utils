@@ -190,7 +190,7 @@ open class SimpleDtoMembersStrategy(
     ) {
         fields.forEachIndexed { fieldIndex, originalProperty ->
             val (propertyName, propertyType) =
-                    rootDtoMembersStrategy.addProperty(originalProperty, fieldIndex, typeSpecBuilder)
+                    rootDtoMembersStrategy.addProperty(originalProperty, fieldIndex, typeSpecBuilder, fields)
             rootDtoMembersStrategy.fieldProcessed(fieldIndex, originalProperty, propertyName, propertyType)
         }
     }
@@ -203,7 +203,7 @@ open class SimpleDtoMembersStrategy(
             val commaOrEmpty = if (fieldIndex + 1 < fields.size) "," else ""
             // Tell KotlinPoet that the property is initialized via the constructor parameter,
             // by creating both a constructor param and member property
-            val (propertyName, propertyType) = rootDtoMembersStrategy.addProperty(originalProperty, fieldIndex, typeSpecBuilder)
+            val (propertyName, propertyType) = rootDtoMembersStrategy.addProperty(originalProperty, fieldIndex, typeSpecBuilder, fields)
             // TODO: just separate and decouple the darn component builders already
             // Add line to patch function
             patchFunctionCodeBuilder.addStatement(rootDtoMembersStrategy.toPatchStatement(fieldIndex, originalProperty, commaOrEmpty))
@@ -241,7 +241,8 @@ open class SimpleDtoMembersStrategy(
     override fun addProperty(
             originalProperty: VariableElement,
             fieldIndex: Int,
-            typeSpecBuilder: TypeSpec.Builder
+            typeSpecBuilder: TypeSpec.Builder,
+            fields: List<VariableElement>
     ): Pair<String, TypeName> {
         val propertyName = rootDtoMembersStrategy.toPropertyName(originalProperty)
         val propertyDefaults = rootDtoMembersStrategy.toDefaultValueExpression(originalProperty)
