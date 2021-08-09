@@ -10,13 +10,17 @@ import kotlin.reflect.KFunction1
 /** A [DtoStrategyComposition] that uses constructor references to simplify extensions */
 open class ConstructorRefsCompositeDtoStrategy<N : DtoNameStrategy, T : DtoTypeStrategy, M : DtoMembersStrategy>(
         override val annotatedElementInfo: AnnotatedElementInfo,
-        val dtoNameStrategyConstructor: KFunction1<AnnotatedElementInfo, N>,
-        val dtoTypeStrategyConstructor: KFunction1<AnnotatedElementInfo, T>,
+        val dtoNameStrategyConstructor: KFunction1<DtoStrategyLesserComposition, N>,
+        val dtoTypeStrategyConstructor: KFunction1<DtoStrategyLesserComposition, T>,
         val dtoMembersStrategyConstructor: KFunction1<DtoStrategyLesserComposition, M>
 ) : ClonableDtoStrategyComposition {
 
-    override val dtoNameStrategy = dtoNameStrategyConstructor(annotatedElementInfo)
-    override val dtoTypeStrategy = dtoTypeStrategyConstructor(annotatedElementInfo)
+    override val dtoNameStrategy by lazy {
+        dtoNameStrategyConstructor(this)
+    }
+    override val dtoTypeStrategy by lazy {
+        dtoTypeStrategyConstructor(this)
+    }
     override val dtoMembersStrategy by lazy {
         dtoMembersStrategyConstructor(this)
     }

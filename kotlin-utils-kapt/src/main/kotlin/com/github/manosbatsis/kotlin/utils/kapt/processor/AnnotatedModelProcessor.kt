@@ -76,39 +76,54 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
             roundEnv: RoundEnvironment,
             supportedAnnotationTypes: Set<String>
     ): Map<Class<out Annotation>, Set<Element>> {
-        return  supportedAnnotationTypes
+        return supportedAnnotationTypes
                 .map { Class.forName(it) as Class<out Annotation> }
-                .map { it to roundEnv.getElementsAnnotatedWith(it) .toSet() }
+                .map { it to roundEnv.getElementsAnnotatedWith(it).toSet() }
                 .toMap()
     }
+
+    fun getFieldNameExclusions(): Set<String> = emptySet()
 
     fun toAnnotatedElementInfos(
             annotatedElements: Map<Class<out Annotation>, Set<out Element>>
     ): List<AnnotatedElementInfo> {
+        println("toAnnotatedElementInfos called")
+        val classAndInterfaceKinds = listOf(ElementKind.CLASS, ElementKind.INTERFACE)
+        val fieldNameExclusions = getFieldNameExclusions()
         return annotatedElements.flatMap { annotationGroup ->
+
+            println("toAnnotatedElementInfos annotationGroup.value: ${annotationGroup.value}")
             annotationGroup.value.map { annotatedElement ->
                 val annotation = annotatedElement.getAnnotationMirror(annotationGroup.key)
-                when (annotatedElement.kind) {
-                    ElementKind.CLASS -> {
+                println("toAnnotatedElementInfos, class or interface: ${classAndInterfaceKinds.contains(annotatedElement.kind)}")
+                println("toAnnotatedElementInfos, isMixinAnnotatione: ${isMixinAnnotation(annotationGroup.key.canonicalName)}")
+                when {
+                    classAndInterfaceKinds.contains(annotatedElement.kind) -> {
                         val typeElement = annotatedElement as TypeElement
-                        if(isMixinAnnotation(annotationGroup.key.canonicalName)) annotatedElementInfoForMixin(
-                                mixinTypeElement = typeElement,
-                                mixinTypeElementFields = typeElement.accessibleConstructorParameterFields(),
-                                annotation = annotation)
-                        else annotatedElementInfo(
-                                primaryTargetTypeElement = typeElement,
-                                primaryTargetTypeElementFields =  typeElement.accessibleConstructorParameterFields(),
-                                annotation = annotation)
+                        when {
+                            isMixinAnnotation(annotationGroup.key.canonicalName) -> annotatedElementInfoForMixin(
+                                    mixinTypeElement = typeElement,
+                                    mixinTypeElementFields = typeElement.accessibleConstructorParameterFields(true)
+                                            .filterNot { fieldNameExclusions.contains("${it.simpleName}") },
+                                    annotation = annotation)
+                            else -> annotatedElementInfo(
+                                    primaryTargetTypeElement = typeElement,
+                                    primaryTargetTypeElementFields = typeElement.accessibleConstructorParameterFields(true)
+                                            .filterNot { fieldNameExclusions.contains("${it.simpleName}") },
+                                    annotation = annotation)
+                        }
                     }
-                    ElementKind.CONSTRUCTOR -> {
+                    ElementKind.CONSTRUCTOR == annotatedElement.kind -> {
                         val executableElement = annotatedElement as ExecutableElement
-                        if(isMixinAnnotation(annotationGroup.key.canonicalName)) annotatedElementInfoForMixin(
+                        if (isMixinAnnotation(annotationGroup.key.canonicalName)) annotatedElementInfoForMixin(
                                 mixinTypeElement = executableElement.enclosingElement as TypeElement,
-                                mixinTypeElementFields = executableElement.parameters,
+                                mixinTypeElementFields = executableElement.parameters
+                                        .filterNot { fieldNameExclusions.contains("${it.simpleName}") },
                                 annotation = annotation)
                         else annotatedElementInfo(
                                 primaryTargetTypeElement = executableElement.enclosingElement as TypeElement,
-                                primaryTargetTypeElementFields = executableElement.parameters,
+                                primaryTargetTypeElementFields = executableElement.parameters
+                                        .filterNot { fieldNameExclusions.contains("${it.simpleName}") },
                                 annotation = annotation)
                     }
                     else -> throw IllegalArgumentException("Invalid element type, expected a class or constructor")
@@ -134,7 +149,8 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
         }
 
         val secondaryTargetTypeElementFields = if (secondaryTargetTypeElement != null) ElementFilter.fieldsIn(
-                processingEnvironment.elementUtils.getAllMembers(secondaryTargetTypeElement)).fieldsOnly() else emptyList()
+                processingEnvironment.elementUtils.getAllMembers(secondaryTargetTypeElement)).fieldsOnly()
+                .filterNot { getFieldNameExclusions().contains("${it.simpleName}") } else emptyList()
 
         return annotatedElementInfo(
                 annotation = annotation,
@@ -156,6 +172,7 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
         val primaryTargetTypeElement: TypeElement = annotation.getValueAsTypeElement(annotationTargetTypeAttr)
         val primaryTargetTypeElementFields = ElementFilter.fieldsIn(
                 processingEnvironment.elementUtils.getAllMembers(primaryTargetTypeElement)).fieldsOnly()
+                .filterNot { getFieldNameExclusions().contains("${it.simpleName}") }
         return annotatedElementInfo(
                 annotation = annotation,
                 primaryTargetTypeElement = primaryTargetTypeElement,

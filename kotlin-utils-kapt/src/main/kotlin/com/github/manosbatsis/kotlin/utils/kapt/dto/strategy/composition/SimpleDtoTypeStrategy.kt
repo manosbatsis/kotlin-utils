@@ -11,6 +11,15 @@ open class SimpleDtoTypeStrategy(
         override val annotatedElementInfo: AnnotatedElementInfo
 ) : DtoTypeStrategy, ProcessingEnvironmentAware {
 
+    /** Alt constructor using a "root" strategy  */
+    constructor(
+            rootDtoStrategy: DtoStrategyLesserComposition
+    ) : this(rootDtoStrategy.annotatedElementInfo) {
+        this.rootDtoStrategy = rootDtoStrategy
+    }
+
+    var rootDtoStrategy: DtoStrategyLesserComposition? = null
+
     override val processingEnvironment by lazy { annotatedElementInfo.processingEnvironment }
 
     override fun getRootDtoType(): TypeName = Dto::class.java.asTypeName()

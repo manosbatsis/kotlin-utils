@@ -2,6 +2,7 @@ package com.github.manosbatsis.kotlin.utils
 
 import com.github.manosbatsis.kotlin.utils.kapt.dto.DtoInputContext
 import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.composition.DtoMembersStrategy.Statement
+import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util.GetterAsFieldAdapter
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
@@ -11,13 +12,11 @@ import java.util.regex.Pattern
 import javax.annotation.processing.ProcessingEnvironment
 import javax.lang.model.element.*
 import javax.lang.model.element.ElementKind.FIELD
-import javax.lang.model.type.ArrayType
-import javax.lang.model.type.DeclaredType
-import javax.lang.model.type.PrimitiveType
-import javax.lang.model.type.TypeMirror
+import javax.lang.model.type.*
 import javax.lang.model.util.ElementFilter
 import javax.tools.Diagnostic.Kind.ERROR
 import javax.tools.Diagnostic.Kind.NOTE
+import kotlin.reflect.KClass
 
 
 /**
@@ -55,22 +54,52 @@ interface ProcessingEnvironmentAware {
 
     fun List<VariableElement>.fieldsOnly() = this.filterNot { it.kind != FIELD || isStatic(it) }
 
-    /** Returns all fields in this type that also appear as a constructor parameter. */
-    fun TypeElement.accessibleConstructorParameterFields(): List<VariableElement> {
-        val allMembers = processingEnvironment.elementUtils.getAllMembers(this)
-        val fields = ElementFilter.fieldsIn(allMembers).fieldsOnly()
+    fun Element.isGetter(): Boolean = (this is ExecutableElement
+            && ElementKind.METHOD == kind
+            && parameters.isEmpty())
+            && ((simpleName.startsWith("get") && "$simpleName" != "getClass")
+            || (simpleName.startsWith("is") && returnType.kind == TypeKind.BOOLEAN))
 
-        val constructors = ElementFilter.constructorsIn(allMembers)
-        val constructorParamNames = constructors
-                .flatMap { it.parameters }
-                .filterNotNull()
-                .filterNot {
-                    it.modifiers.contains(Modifier.PRIVATE)
-                            || it.modifiers.contains(Modifier.PROTECTED)
-                }
-                .map { it.simpleName.toString() }
-                .toSet()
-        return fields.filter { constructorParamNames.contains(it.simpleName.toString()) }
+    /** Returns all fields in this type that, if a concrete class, also appear as a constructor parameter. */
+    fun TypeElement.accessibleConstructorParameterFields(adaptInterfaceGetters: Boolean = false): List<VariableElement> {
+        val allMembers = processingEnvironment.elementUtils.getAllMembers(this)
+        println("accessibleConstructorParameterFields for ${simpleName}, allMembers: ${allMembers.map { it.simpleName }.joinToString(",")}")
+        val fieldsIn = ElementFilter.fieldsIn(allMembers)
+        println("accessibleConstructorParameterFields for ${simpleName}, fieldsIn: ${fieldsIn.map { it.simpleName }.joinToString(",")}")
+        val fields = ElementFilter.fieldsIn(allMembers).fieldsOnly()
+        println("accessibleConstructorParameterFields for ${simpleName}, fields: ${fields.map { it.simpleName }.joinToString(",")}")
+        println("accessibleConstructorParameterFields for ${simpleName}, interface: ${ElementKind.INTERFACE == kind}")
+        println("accessibleConstructorParameterFields for ${simpleName}, use adapters: ${fields.isEmpty() && adaptInterfaceGetters && ElementKind.INTERFACE == kind}")
+
+        val constructorFields = if (fields.isEmpty() && adaptInterfaceGetters && ElementKind.INTERFACE == kind)
+            allMembers.mapNotNull { elem ->
+                if (elem is ExecutableElement && elem.isGetter()) GetterAsFieldAdapter(elem, false, allMembers) else null
+            }
+        else {
+            val constructors = ElementFilter.constructorsIn(allMembers)
+            println("accessibleConstructorParameterFields for ${simpleName}, constructors: ${constructors.size}")
+
+            val constructorParamNames = constructors
+                    .flatMap { it.parameters }
+                    .filterNotNull()
+                    .filterNot {
+                        it.modifiers.contains(Modifier.PRIVATE)
+                                || it.modifiers.contains(Modifier.PROTECTED)
+                    }
+                    .map { it.simpleName.toString() }
+                    .toSet()
+            println("accessibleConstructorParameterFields for ${simpleName}, constructorParamNames(${constructorParamNames.size}): ${constructorParamNames.joinToString(",")}")
+
+            val nonArgPrefixedConstructorParamNames = constructorParamNames.filterNot { it.startsWith("arg") }
+            println("accessibleConstructorParameterFields for ${simpleName}, nonArgPrefixedConstructorParamNames(${nonArgPrefixedConstructorParamNames.size}): ${nonArgPrefixedConstructorParamNames.joinToString(",")}")
+            // Ignore filtering if contructor arg names are missing
+            if (nonArgPrefixedConstructorParamNames.isNotEmpty())
+                fields.filter { constructorParamNames.contains(it.simpleName.toString()) }
+            else fields
+
+        }
+        println("accessibleConstructorParameterFields for ${simpleName}, constructorFields: ${constructorFields.map { it.simpleName }.joinToString(",")}")
+        return constructorFields
     }
 
     fun Iterable<String>.hasBasePackageOf(packageName: String): Boolean {
@@ -290,6 +319,12 @@ interface ProcessingEnvironmentAware {
         return this.asKotlinClassName().topLevelClassName().packageName
     }
 
+    /** Check if this type element is an interface */
+    fun TypeElement.isInterface(): Boolean {
+        return superclass.kind == TypeKind.NONE
+                && qualifiedName.toString() != java.lang.Object::class.java.canonicalName
+    }
+
     /** Get the given annotation's value as a [TypeElement] if it exists, throw an error otherwise */
     fun Element.getAnnotationValueAsTypeElement(annotation: Class<out Annotation>, propertyName: String): TypeElement? =
             this.findAnnotationValueAsTypeElement(annotation, propertyName)
@@ -304,14 +339,26 @@ interface ProcessingEnvironmentAware {
             this.findAnnotationMirror(annotation)?.findAnnotationValue(propertyName)
 
     /** Get the given annotation value as a [TypeElement] if it exists, null otherwise */
-    fun AnnotationMirror.findValueAsTypeElement(propertyName: String): TypeElement? {
-        val annotationMirrorValue = this.findValueAsTypeMirror(propertyName) ?: return null
+    fun AnnotationMirror.findValueAsTypeElement(memberName: String): TypeElement? {
+        val annotationMirrorValue = this.findValueAsTypeMirror(memberName) ?: return null
         return processingEnvironment.typeUtils.asElement(annotationMirrorValue) as TypeElement?
     }
 
+    /** Get the given annotation value as a [KClass] if it exists and available in the classpath, throw an error otherwise */
+    fun AnnotationMirror.getValueAsKClass(memberName: String): KClass<*> {
+        return this.findValueAsKClass(memberName)
+                ?: throw IllegalStateException("Could not find a valid value for $memberName")
+    }
+
+    /** Get the given annotation value as a [KClass] if it exists and available in the classpath, null otherwise */
+    fun AnnotationMirror.findValueAsKClass(memberName: String): KClass<*>? {
+        val baseFlowAnnotationValue = this.findAnnotationValue(memberName) ?: return null
+        return baseFlowAnnotationValue.value as KClass<*>
+    }
+
     /** Get the given annotation value as a [TypeElement] if it exists, null otherwise */
-    fun AnnotationMirror.findValueAsTypeMirror(propertyName: String): TypeMirror? {
-        val baseFlowAnnotationValue = this.findAnnotationValue(propertyName) ?: return null
+    fun AnnotationMirror.findValueAsTypeMirror(memberName: String): TypeMirror? {
+        val baseFlowAnnotationValue = this.findAnnotationValue(memberName) ?: return null
         return baseFlowAnnotationValue.value as TypeMirror
     }
 

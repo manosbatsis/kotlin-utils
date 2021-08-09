@@ -1,5 +1,6 @@
 package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy
 
+import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeSpec.Builder
 import javax.lang.model.element.VariableElement
@@ -31,6 +32,11 @@ interface DtoStrategy  {
 
     /** The field names to exclude */
     fun getFieldExcludes(): List<String> = emptyList()
+
+    /** Override to use the [FileSpec.Builder] before the processor writeas the generated type */
+    fun onBeforeFileWrite(fileSpecBuilder: FileSpec.Builder) {
+        // NO-OP
+    }
 
     fun List<VariableElement>.includeNames(includes: List<String> = emptyList()) =
             if (includes.isEmpty()) this else filter { includes.contains(it.simpleName.toString()) }
