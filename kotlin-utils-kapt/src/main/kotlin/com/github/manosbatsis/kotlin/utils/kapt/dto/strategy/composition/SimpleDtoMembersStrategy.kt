@@ -123,8 +123,11 @@ open class SimpleDtoMembersStrategy(
                 ?: if (rootDtoMembersStrategy.toPropertyTypeName(variableElement).isNullable) Pair("null", true) else null
     }
 
-    override fun findDefaultValueAnnotationValue(variableElement: VariableElement): Pair<String, Boolean>? =
-            variableElement.findAnnotationMirror(DefaultValue::class.java)?.let {
+    override fun findDefaultValueAnnotationValue(
+            variableElement: VariableElement
+    ): Pair<String, Boolean>? = variableElement.annotationMirrors
+            .find { it.annotationType.asElement().simpleName.toString() == DefaultValue::class.java.simpleName }
+            ?.let {
                 it.findAnnotationValue("value")!!.value.toString() to
                         it.findAnnotationValue("nullable")!!.value!!.toString().toBoolean()
             }

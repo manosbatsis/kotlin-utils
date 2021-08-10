@@ -87,16 +87,12 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
     fun toAnnotatedElementInfos(
             annotatedElements: Map<Class<out Annotation>, Set<out Element>>
     ): List<AnnotatedElementInfo> {
-        println("toAnnotatedElementInfos called")
         val classAndInterfaceKinds = listOf(ElementKind.CLASS, ElementKind.INTERFACE)
         val fieldNameExclusions = getFieldNameExclusions()
         return annotatedElements.flatMap { annotationGroup ->
 
-            println("toAnnotatedElementInfos annotationGroup.value: ${annotationGroup.value}")
             annotationGroup.value.map { annotatedElement ->
                 val annotation = annotatedElement.getAnnotationMirror(annotationGroup.key)
-                println("toAnnotatedElementInfos, class or interface: ${classAndInterfaceKinds.contains(annotatedElement.kind)}")
-                println("toAnnotatedElementInfos, isMixinAnnotatione: ${isMixinAnnotation(annotationGroup.key.canonicalName)}")
                 when {
                     classAndInterfaceKinds.contains(annotatedElement.kind) -> {
                         val typeElement = annotatedElement as TypeElement

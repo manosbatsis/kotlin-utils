@@ -30,7 +30,7 @@ interface Dto<T : Any> {
  * Let annotation processors know the desired default value for a property.
  */
 @Retention(AnnotationRetention.SOURCE)
-@Target(AnnotationTarget.FIELD)
+@Target(AnnotationTarget.FIELD, AnnotationTarget.PROPERTY_GETTER)
 annotation class DefaultValue(
         val value: String,
         val nullable: Boolean = false
