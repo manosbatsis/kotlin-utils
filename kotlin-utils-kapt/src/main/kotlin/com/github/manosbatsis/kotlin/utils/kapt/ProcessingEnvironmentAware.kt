@@ -43,9 +43,9 @@ interface ProcessingEnvironmentAware {
             val parent = element.enclosingElement
             if (parent is TypeElement && isKotlinClass(parent)) {
                 val instances = parent.enclosedElements
-                        .filter { "INSTANCE" == it.simpleName.toString() }
-                        .filter { it.modifiers.contains(Modifier.STATIC) }
-                        .filter { it.kind.isField }
+                    .filter { "INSTANCE" == it.simpleName.toString() }
+                    .filter { it.modifiers.contains(Modifier.STATIC) }
+                    .filter { it.kind.isField }
                 return instances.isNotEmpty()
             }
             return false
@@ -60,45 +60,126 @@ interface ProcessingEnvironmentAware {
             && ((simpleName.startsWith("get") && "$simpleName" != "getClass")
             || (simpleName.startsWith("is") && returnType.kind == TypeKind.BOOLEAN))
 
+    fun TypeElement.getTypeElementHierarchy(): List<TypeElement> {
+        val typeElements = mutableListOf<TypeElement>()
+        var currentTypeElement = this
+        val topLevelTypes = listOf(Object::class.java.canonicalName, Any::class.qualifiedName.toString())
+        while (!topLevelTypes.contains(currentTypeElement.qualifiedName.toString())) {
+            println("getTypeElementHierarchy, currentTypeElement: ${currentTypeElement}")
+
+            typeElements.add(currentTypeElement)
+            currentTypeElement = currentTypeElement.superclass.asTypeElement()
+        }
+        processingEnvironment.noteMessage {
+            "getTypeElementHierarchy: ${typeElements.joinToString(",") { it.qualifiedName }}"
+        }
+        return typeElements
+    }
+
+    fun TypeElement.getFieldsOnlyForHierarchy(fieldsOnly: Boolean = false): List<VariableElement>{
+        return getAllMembersForHierarchy(true).map { it as VariableElement }
+    }
+
+    fun TypeElement.getAllMembersForHierarchy(fieldsOnly: Boolean = false): List<Element> {
+        // From the top superclass down to this instance
+        return this.getTypeElementHierarchy()
+            .reversed()
+            // Create a map of members by name
+            .map { currentTypeElement ->
+                processingEnvironment.elementUtils
+                    .getAllMembers(currentTypeElement)
+                    .let {
+                        if (fieldsOnly) ElementFilter.fieldsIn(it).fieldsOnly()
+                        else it
+                    }
+                    .associateBy { it.simpleName.toString() }
+                    .also {
+                        processingEnvironment.noteMessage {
+                            "getAllMembersForHierarchy, type: ${currentTypeElement.simpleName}, members: ${it.keys.joinToString(",")}"
+                        }
+                    }
+            }
+            // Overwrite as we go deeper into the class hierarchy
+            .fold(mutableMapOf<String, Element>()) { acc, v ->
+                v.forEach { (key, value) ->
+                    acc[key] = value
+                }
+                acc
+            }
+            .also {
+                processingEnvironment.noteMessage {
+                    "getAllMembersForHierarchy, all members: ${it.keys.joinToString(",")}"
+                }
+            }
+            .values.toList()
+    }
+
+
     /** Returns all fields in this type that, if a concrete class, also appear as a constructor parameter. */
     fun TypeElement.accessibleConstructorParameterFields(adaptInterfaceGetters: Boolean = false): List<VariableElement> {
-        val allMembers = processingEnvironment.elementUtils.getAllMembers(this)
-        println("accessibleConstructorParameterFields for ${simpleName}, allMembers: ${allMembers.map { it.simpleName }.joinToString(",")}")
-        val fieldsIn = ElementFilter.fieldsIn(allMembers)
-        println("accessibleConstructorParameterFields for ${simpleName}, fieldsIn: ${fieldsIn.map { it.simpleName }.joinToString(",")}")
-        val fields = ElementFilter.fieldsIn(allMembers).fieldsOnly()
-        println("accessibleConstructorParameterFields for ${simpleName}, fields: ${fields.map { it.simpleName }.joinToString(",")}")
+        val allMembers = this.getAllMembersForHierarchy()
+        val fields = this.getFieldsOnlyForHierarchy()
+        println(
+            "accessibleConstructorParameterFields for ${simpleName}, allMembers: ${
+                allMembers.map { it.simpleName }.joinToString(",")
+            }"
+        )
+        println(
+            "accessibleConstructorParameterFields for ${simpleName}, fields: ${
+                fields.map { it.simpleName }.joinToString(",")
+            }"
+        )
         println("accessibleConstructorParameterFields for ${simpleName}, interface: ${ElementKind.INTERFACE == kind}")
         println("accessibleConstructorParameterFields for ${simpleName}, use adapters: ${fields.isEmpty() && adaptInterfaceGetters && ElementKind.INTERFACE == kind}")
 
         val constructorFields = if (fields.isEmpty() && adaptInterfaceGetters && ElementKind.INTERFACE == kind)
             allMembers.mapNotNull { elem ->
-                if (elem is ExecutableElement && elem.isGetter()) GetterAsFieldAdapter(elem, false, allMembers) else null
+                if (elem is ExecutableElement && elem.isGetter()) GetterAsFieldAdapter(
+                    elem,
+                    false,
+                    allMembers
+                ) else null
             }
         else {
             val constructors = ElementFilter.constructorsIn(allMembers)
             println("accessibleConstructorParameterFields for ${simpleName}, constructors: ${constructors.size}")
 
             val constructorParamNames = constructors
-                    .flatMap { it.parameters }
-                    .filterNotNull()
-                    .filterNot {
-                        it.modifiers.contains(Modifier.PRIVATE)
-                                || it.modifiers.contains(Modifier.PROTECTED)
-                    }
-                    .map { it.simpleName.toString() }
-                    .toSet()
-            println("accessibleConstructorParameterFields for ${simpleName}, constructorParamNames(${constructorParamNames.size}): ${constructorParamNames.joinToString(",")}")
+                .flatMap { it.parameters }
+                .filterNotNull()
+                .filterNot {
+                    it.modifiers.contains(Modifier.PRIVATE)
+                            || it.modifiers.contains(Modifier.PROTECTED)
+                }
+                .map { it.simpleName.toString() }
+                .toSet()
+            println(
+                "accessibleConstructorParameterFields for ${simpleName}, constructorParamNames(${constructorParamNames.size}): ${
+                    constructorParamNames.joinToString(
+                        ","
+                    )
+                }"
+            )
 
             val nonArgPrefixedConstructorParamNames = constructorParamNames.filterNot { it.startsWith("arg") }
-            println("accessibleConstructorParameterFields for ${simpleName}, nonArgPrefixedConstructorParamNames(${nonArgPrefixedConstructorParamNames.size}): ${nonArgPrefixedConstructorParamNames.joinToString(",")}")
+            println(
+                "accessibleConstructorParameterFields for ${simpleName}, nonArgPrefixedConstructorParamNames(${nonArgPrefixedConstructorParamNames.size}): ${
+                    nonArgPrefixedConstructorParamNames.joinToString(
+                        ","
+                    )
+                }"
+            )
             // Ignore filtering if contructor arg names are missing
             if (nonArgPrefixedConstructorParamNames.isNotEmpty())
                 fields.filter { constructorParamNames.contains(it.simpleName.toString()) }
             else fields
 
         }
-        println("accessibleConstructorParameterFields for ${simpleName}, constructorFields: ${constructorFields.map { it.simpleName }.joinToString(",")}")
+        println(
+            "accessibleConstructorParameterFields for ${simpleName}, constructorFields: ${
+                constructorFields.map { it.simpleName }.joinToString(",")
+            }"
+        )
         return constructorFields
     }
 
@@ -122,7 +203,7 @@ interface ProcessingEnvironmentAware {
 
     /** Create a constructor with property parameters */
     fun TypeSpec.Builder.primaryConstructor(vararg properties: PropertySpec): TypeSpec.Builder =
-            this.primaryConstructor(*properties.map { ConstructorProperty(it) }.toTypedArray())
+        this.primaryConstructor(*properties.map { ConstructorProperty(it) }.toTypedArray())
 
     /** Create a constructor with property parameters */
     fun TypeSpec.Builder.primaryConstructor(vararg properties: ConstructorProperty): TypeSpec.Builder {
@@ -133,22 +214,29 @@ interface ProcessingEnvironmentAware {
             paramSpec.build()
         }
         val constructor = FunSpec.constructorBuilder()
-                .addParameters(parameters)
-                .build()
+            .addParameters(parameters)
+            .build()
 
         return this
-                .primaryConstructor(constructor)
-                .addProperties(propertySpecs)
+            .primaryConstructor(constructor)
+            .addProperties(propertySpecs)
     }
 
-    fun TypeSpec.Builder.copyAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>): TypeSpec.Builder {
+    fun TypeSpec.Builder.copyAnnotationsByBasePackage(
+        source: Element,
+        basePackages: Iterable<String>
+    ): TypeSpec.Builder {
         filterAnnotationsByBasePackage(source, basePackages).forEach {
             this.addAnnotation(AnnotationSpec.get(it))
         }
         return this
     }
 
-    fun PropertySpec.Builder.copyAnnotationsByBasePackage(source: Element, basePackages: Iterable<String>, siteTarget: UseSiteTarget? = null): PropertySpec.Builder {
+    fun PropertySpec.Builder.copyAnnotationsByBasePackage(
+        source: Element,
+        basePackages: Iterable<String>,
+        siteTarget: UseSiteTarget? = null
+    ): PropertySpec.Builder {
         filterAnnotationsByBasePackage(source, basePackages).forEach {
             this.addAnnotation(AnnotationSpec.get(it).toBuilder().useSiteTarget(siteTarget).build())
         }
@@ -156,7 +244,7 @@ interface ProcessingEnvironmentAware {
     }
 
     fun dtoSpec(dtoInputContext: DtoInputContext): TypeSpec =
-            dtoInputContext.dtoStrategy.dtoTypeSpec()
+        dtoInputContext.dtoStrategy.dtoTypeSpec()
 
     /**
      * Converts this element to a [TypeName], ensuring that Java types
@@ -195,8 +283,8 @@ interface ProcessingEnvironmentAware {
                 val typeName = this.asTypeElement().asKotlinClassName()
                 return if (this.typeArguments.isNotEmpty())
                     typeName.parameterizedBy(*typeArguments
-                            .mapNotNull { it.asKotlinTypeName() }
-                            .toTypedArray())
+                        .mapNotNull { it.asKotlinTypeName() }
+                        .toTypedArray())
                 else typeName
             }
             else -> this.asTypeName()
@@ -224,10 +312,12 @@ interface ProcessingEnvironmentAware {
      * @param erasure whether to use the raw VS the generic [targetType]
      */
     fun TypeElement.isSunTypeOf(targetType: Class<*>, erasure: Boolean = false): Boolean {
-        val targetTypeMirror: TypeMirror = processingEnvironment.elementUtils.getTypeElement(targetType.canonicalName).asType()
+        val targetTypeMirror: TypeMirror =
+            processingEnvironment.elementUtils.getTypeElement(targetType.canonicalName).asType()
         return processingEnvironment.typeUtils.isSubtype(
-                this.asType(),
-                if (erasure) processingEnvironment.typeUtils.erasure(targetTypeMirror) else targetTypeMirror)
+            this.asType(),
+            if (erasure) processingEnvironment.typeUtils.erasure(targetTypeMirror) else targetTypeMirror
+        )
     }
 
     /**
@@ -235,10 +325,12 @@ interface ProcessingEnvironmentAware {
      * @param erasure whether to use the raw VS the generic [targetType]
      */
     fun TypeElement.isAssignableTo(targetType: Class<*>, erasure: Boolean = false): Boolean {
-        val targetTypeMirror: TypeMirror = processingEnvironment.elementUtils.getTypeElement(targetType.canonicalName).asType()
+        val targetTypeMirror: TypeMirror =
+            processingEnvironment.elementUtils.getTypeElement(targetType.canonicalName).asType()
         return processingEnvironment.typeUtils.isAssignable(
-                this.asType(),
-                if (erasure) processingEnvironment.typeUtils.erasure(targetTypeMirror) else targetTypeMirror)
+            this.asType(),
+            if (erasure) processingEnvironment.typeUtils.erasure(targetTypeMirror) else targetTypeMirror
+        )
     }
 
     /** Returns the [TypeElement] represented by this [TypeMirror]. */
@@ -270,18 +362,18 @@ interface ProcessingEnvironmentAware {
     /** Return true if this element has the specified [annotation]. */
     fun Element.hasAnnotationDirectly(annotation: Class<*>): Boolean {
         return this.annotationMirrors
-                .mapNotNull { it.annotationType.toString() }
-                .toSet()
-                .contains(annotation.name)
+            .mapNotNull { it.annotationType.toString() }
+            .toSet()
+            .contains(annotation.name)
     }
 
     /** Return true if there is a constructor parameter with the same name as this element that has the specified [annotation]. */
     fun Element.hasAnnotationViaConstructorParameter(annotation: Class<*>): Boolean {
         val parameterAnnotations = getConstructorParameter()?.annotationMirrors ?: listOf()
         return parameterAnnotations
-                .mapNotNull { it.annotationType.toString() }
-                .toSet()
-                .contains(annotation.name)
+            .mapNotNull { it.annotationType.toString() }
+            .toSet()
+            .contains(annotation.name)
     }
 
     /** Returns the first constructor parameter with the same name as this element, if any such exists. */
@@ -289,20 +381,20 @@ interface ProcessingEnvironmentAware {
         val enclosingElement = this.enclosingElement
         return if (enclosingElement is TypeElement)
             ElementFilter.constructorsIn(processingEnvironment.elementUtils.getAllMembers(enclosingElement))
-                    .flatMap { it.parameters }
-                    .filterNotNull()
-                    .firstOrNull { it.simpleName == this.simpleName }
+                .flatMap { it.parameters }
+                .filterNotNull()
+                .firstOrNull { it.simpleName == this.simpleName }
         else null
     }
 
     /** Get the mirror of the single annotation instance matching the given [annotationClass] for this element. */
     fun Element.getAnnotationMirror(annotationClass: Class<out Annotation>): AnnotationMirror =
-            findAnnotationMirror(annotationClass)
-                    ?: throw IllegalStateException("Annotation value not found for class ${annotationClass.name}")
+        findAnnotationMirror(annotationClass)
+            ?: throw IllegalStateException("Annotation value not found for class ${annotationClass.name}")
 
     /** Get the mirror of the single annotation instance matching the given [annotationClass] for this element. */
     fun Element.findAnnotationMirror(annotationClass: Class<out Annotation>): AnnotationMirror? =
-            findAnnotationMirrors(annotationClass).firstOrNull()
+        findAnnotationMirrors(annotationClass).firstOrNull()
 
     /**
      * Get the mirrors of the annotation instances matching the given [annotationClass] for this element.
@@ -311,7 +403,7 @@ interface ProcessingEnvironmentAware {
     fun Element.findAnnotationMirrors(annotationClass: Class<out Annotation>): List<AnnotationMirror> {
         val annotationClassName = annotationClass.name
         return this.annotationMirrors
-                .filter { mirror -> mirror != null && mirror.annotationType.toString().equals(annotationClassName) }
+            .filter { mirror -> mirror != null && mirror.annotationType.toString().equals(annotationClassName) }
     }
 
     /** Get the package name of this [TypeElement] */
@@ -327,16 +419,19 @@ interface ProcessingEnvironmentAware {
 
     /** Get the given annotation's value as a [TypeElement] if it exists, throw an error otherwise */
     fun Element.getAnnotationValueAsTypeElement(annotation: Class<out Annotation>, propertyName: String): TypeElement? =
-            this.findAnnotationValueAsTypeElement(annotation, propertyName)
-                    ?: throw IllegalStateException("Could not find a valid value for $propertyName")
+        this.findAnnotationValueAsTypeElement(annotation, propertyName)
+            ?: throw IllegalStateException("Could not find a valid value for $propertyName")
 
     /** Get the given annotation's value as a [TypeElement] if it exists, null otherwise */
-    fun Element.findAnnotationValueAsTypeElement(annotation: Class<out Annotation>, propertyName: String): TypeElement? =
-            this.findAnnotationMirror(annotation)?.findValueAsTypeElement(propertyName)
+    fun Element.findAnnotationValueAsTypeElement(
+        annotation: Class<out Annotation>,
+        propertyName: String
+    ): TypeElement? =
+        this.findAnnotationMirror(annotation)?.findValueAsTypeElement(propertyName)
 
     /** Get the given annotation's value if it exists, null otherwise */
     fun Element.findAnnotationValue(annotation: Class<out Annotation>, propertyName: String): AnnotationValue? =
-            this.findAnnotationMirror(annotation)?.findAnnotationValue(propertyName)
+        this.findAnnotationMirror(annotation)?.findAnnotationValue(propertyName)
 
     /** Get the given annotation value as a [TypeElement] if it exists, null otherwise */
     fun AnnotationMirror.findValueAsTypeElement(memberName: String): TypeElement? {
@@ -347,7 +442,7 @@ interface ProcessingEnvironmentAware {
     /** Get the given annotation value as a [KClass] if it exists and available in the classpath, throw an error otherwise */
     fun AnnotationMirror.getValueAsKClass(memberName: String): KClass<*> {
         return this.findValueAsKClass(memberName)
-                ?: throw IllegalStateException("Could not find a valid value for $memberName")
+            ?: throw IllegalStateException("Could not find a valid value for $memberName")
     }
 
     /** Get the given annotation value as a [KClass] if it exists and available in the classpath, null otherwise */
@@ -364,27 +459,28 @@ interface ProcessingEnvironmentAware {
 
     /** Get the given annotation value as a [TypeElement] if it exists, throw an error otherwise */
     fun AnnotationMirror.getValueAsTypeElement(memberName: String): TypeElement =
-            this.findValueAsTypeElement(memberName)
-                    ?: throw IllegalStateException("Could not find a valid value for $memberName")
+        this.findValueAsTypeElement(memberName)
+            ?: throw IllegalStateException("Could not find a valid value for $memberName")
 
     /** Get the given annotation value as a [AnnotationValue] if it exists, throw an error otherwise */
     fun AnnotationMirror.getAnnotationValue(memberName: String): AnnotationValue =
-            findAnnotationValue(memberName) ?: throw IllegalStateException("Annotation value not found for string '$memberName'")
+        findAnnotationValue(memberName)
+            ?: throw IllegalStateException("Annotation value not found for string '$memberName'")
 
     /** Get the given annotation value as a [AnnotationValue] if it exists, null otherwise */
     fun AnnotationMirror.findAnnotationValue(memberName: String): AnnotationValue? =
-            processingEnvironment.elementUtils.getElementValuesWithDefaults(this).entries
-                    .filter { entry -> entry.key.simpleName.toString() == memberName }
-                    .mapNotNull { entry -> entry.value }
-                    .firstOrNull()
+        processingEnvironment.elementUtils.getElementValuesWithDefaults(this).entries
+            .filter { entry -> entry.key.simpleName.toString() == memberName }
+            .mapNotNull { entry -> entry.value }
+            .firstOrNull()
 
     /** Get the given annotation value as a [String] if it exists, null otherwise */
     fun AnnotationMirror.findAnnotationValueString(memberName: String): String? =
-            findAnnotationValue(memberName)?.value as String?
+        findAnnotationValue(memberName)?.value as String?
 
     /** Get the given annotation value as a [String] if it exists, null otherwise */
     fun AnnotationMirror.findAnnotationValueEnum(memberName: String): VariableElement? =
-            findAnnotationValue(memberName)?.value as VariableElement?
+        findAnnotationValue(memberName)?.value as VariableElement?
 
 
     /** Get the given annotation value as a list of [AnnotationValue] if it exists, null otherwise */
@@ -395,7 +491,7 @@ interface ProcessingEnvironmentAware {
     /** Get the given annotation value as a list of [AnnotationValue] if it exists, null otherwise */
     fun AnnotationMirror.getAnnotationValueList(memberName: String): List<AnnotationValue> {
         return getAnnotationValue(memberName).value as List<AnnotationValue>?
-                ?: error("Cound not find a non-null value for annotation member $memberName")
+            ?: error("Cound not find a non-null value for annotation member $memberName")
     }
 
     /** Get the given annotation value as a `List<String>` if it exists, null otherwise */
@@ -405,10 +501,10 @@ interface ProcessingEnvironmentAware {
 
     /** Get the given annotation value as a `List<VariableElement>`if it exists, null otherwise */
     fun <T : Enum<T>> AnnotationMirror.findAnnotationValueListEnum(
-            memberName: String,
-            enumType: Class<T>//TODO: add optiona function ref, use valueOf as default
+        memberName: String,
+        enumType: Class<T>//TODO: add optiona function ref, use valueOf as default
     ): List<T>? {
-        return findAnnotationValueList(memberName)?.map{java.lang.Enum.valueOf(enumType, it.value.toString())}
+        return findAnnotationValueList(memberName)?.map { java.lang.Enum.valueOf(enumType, it.value.toString()) }
     }
 /*
 getDtoStrategies, it: com.github.manosbatsis.vaultaire.annotation.VaultaireDtoStrategyKeys.DEFAULT
@@ -418,13 +514,13 @@ Note: getDtoStrategies, it.val;ue type: class com.sun.tools.javac.code.Symbol$Va
 Note: getDtoStrategies, it: com.github.manosbatsis.vaultaire.annotation.VaultaireDtoStrategyKeys.LITENote: getDtoStrategies, it type: class com.sun.tools.javac.code.Attribute$EnumNote: getDtoStrategies, it.val;ue: LITENote: getDtoStrategies, it.val;ue type: class com.sun.tools.javac.code.Symbol$VarSymbol                                                                                                                                                                                                       */
     /** Get the given annotation value as a `List<VariableElement>`if it exists, an empty list otherwise */
     fun AnnotationMirror.findAnnotationValueListTypeMirror(memberName: String): List<TypeMirror>? {
-        return findAnnotationValueList(memberName)?.map{ it.value as TypeMirror }
+        return findAnnotationValueList(memberName)?.map { it.value as TypeMirror }
     }
 
     /** Get the given annotation value as a `List<TypeElement>`if it exists, null otherwise */
     fun AnnotationMirror.findAnnotationValueListTypeElement(memberName: String): List<TypeElement>? {
         return findAnnotationValueListTypeMirror(memberName)
-                ?.map{ processingEnvironment.typeUtils.asElement(it) as TypeElement }
+            ?.map { processingEnvironment.typeUtils.asElement(it) as TypeElement }
     }
 
     /** Prints an error message using this element as a position hint. */
