@@ -20,6 +20,7 @@ interface AnnotatedElementInfo {
     val mixinTypeElementFields: List<VariableElement>
     val copyAnnotationPackages: List<String>
     val ignoreProperties: List<String>
+    val nonUpdatableProperties: List<String>
     val generatedPackageName: String
     val sourceRoot: File
     val primaryTargetTypeElementSimpleName: String
@@ -51,6 +52,7 @@ data class SimpleAnnotatedElementInfo(
         override val mixinTypeElementFields: List<VariableElement>,
         override val copyAnnotationPackages: List<String>,
         override val ignoreProperties: List<String>,
+        override val nonUpdatableProperties: List<String>,
         override val generatedPackageName: String,
         override val sourceRoot: File,
         override val primaryTargetTypeElementSimpleName: String = primaryTargetTypeElement.simpleName.toString(),

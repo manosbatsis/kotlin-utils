@@ -67,6 +67,7 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
             mixinTypeElementFields: List<VariableElement>,
             copyAnnotationPackages: List<String> = getStringValuesList(annotation, ANN_ATTR_COPY_ANNOTATION_PACKAGES),
             ignoreProperties: List<String> = getStringValuesList(annotation, ANN_ATTR_CIGNORE_PROPS),
+            nonUpdatableProperties: List<String> = emptyList(),
             sourceRoot: File,
             generatedPackageName: String = mapPackageName(primaryTargetTypeElement, secondaryTargetTypeElement, mixinTypeElement)
 
@@ -222,6 +223,7 @@ abstract class AbstractAnnotatedModelInfoProcessor(
             mixinTypeElementFields: List<VariableElement>,
             copyAnnotationPackages: List<String>,
             ignoreProperties: List<String>,
+            nonUpdatableProperties: List<String>,
             sourceRoot: File,
             generatedPackageName: String
 
@@ -236,6 +238,7 @@ abstract class AbstractAnnotatedModelInfoProcessor(
             mixinTypeElementFields = mixinTypeElementFields,
             copyAnnotationPackages = copyAnnotationPackages,
             ignoreProperties = ignoreProperties,
+            nonUpdatableProperties = nonUpdatableProperties,
             sourceRoot = sourceRootFile,
             generatedPackageName = generatedPackageName,
             isNonDataClass = annotation.findAnnotationValue("nonDataClass")?.value as Boolean?

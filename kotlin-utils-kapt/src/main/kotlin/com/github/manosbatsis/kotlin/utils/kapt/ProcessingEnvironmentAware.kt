@@ -25,6 +25,7 @@ import kotlin.reflect.KClass
 interface ProcessingEnvironmentAware {
     companion object {
         val camelToUnderscorePattern = Pattern.compile("(?<=[a-z])[A-Z]")
+        val metaDataClass = Class.forName("kotlin.Metadata").asSubclass(Annotation::class.java)
     }
 
     /** Override to implement [ProcessingEnvironment] access */
@@ -114,6 +115,11 @@ interface ProcessingEnvironmentAware {
             .values.toList()
     }
 
+    fun TypeElement.isKotlin(): Boolean{
+        return processingEnvironment.elementUtils.getAllAnnotationMirrors(this).any { (
+                it.annotationType.asElement() as TypeElement).qualifiedName.toString() == "kotlin.Metadata"
+        }
+    }
 
     /** Returns all fields in this type that, if a concrete class, also appear as a constructor parameter. */
     fun TypeElement.accessibleConstructorParameterFields(adaptInterfaceGetters: Boolean = false): List<VariableElement> {

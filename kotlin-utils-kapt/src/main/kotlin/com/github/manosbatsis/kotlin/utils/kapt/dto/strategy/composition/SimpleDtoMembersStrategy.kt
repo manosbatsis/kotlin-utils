@@ -65,9 +65,21 @@ open class SimpleDtoMembersStrategy(
         CodeBlock.builder().addStatement("return ${dtoNameStrategy.getClassName().simpleName}(")
     }
 
+    protected fun assignmentCtxForToTargetType(
+        fromTypeName: TypeName,
+        toVariableElement: VariableElement
+    ): AssignmentContext{
+        val toTypeName = toVariableElement.asKotlinTypeName()
+        return if(fromTypeName.isNullable && !toTypeName.isNullable)
+            AssignmentContext.OUT.withFallbackValue(" ?: errNull(\"${toVariableElement.simpleName}\")")
+        else
+            AssignmentContext.OUT.withFallbackValue("")
+    }
 
-    protected fun assignmentCtxForToTargetType(propertyName: String): AssignmentContext =
-            AssignmentContext.OUT.withFallbackValue("?: errNull(\"$propertyName\")")
+    @Deprecated("use assignmentCtxForToTargetType(TypeName, VariableElement)")
+    protected fun assignmentCtxForToTargetType(propertyName: String): AssignmentContext {
+        return AssignmentContext.OUT.withFallbackValue(" ?: errNull(\"$propertyName\")")
+    }
 
     protected fun assignmentCtxForToPatched(propertyName: String): AssignmentContext =
             AssignmentContext.OUT.withFallbackValue(" ?: original.$propertyName")
@@ -135,9 +147,9 @@ open class SimpleDtoMembersStrategy(
 
     override fun toTargetTypeStatement(fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String): DtoMembersStrategy.Statement? {
         val propertyName = rootDtoMembersStrategy.toPropertyName(variableElement)
-        val assignmentContext = assignmentCtxForToTargetType(propertyName)
-        val maybeNullFallback = maybeCheckForNull(variableElement, assignmentContext)
-        return DtoMembersStrategy.Statement("      $propertyName = this.$propertyName${maybeNullFallback.fallbackValue}$commaOrEmpty", maybeNullFallback.fallbackArgs)
+        val assignmentContext = assignmentCtxForToTargetType(rootDtoMembersStrategy.toPropertyTypeName(variableElement), variableElement)
+        val maybeNamedParam = if(annotatedElementInfo.primaryTargetTypeElement.isKotlin()) "$propertyName = " else ""
+        return DtoMembersStrategy.Statement("      ${maybeNamedParam}this.$propertyName${assignmentContext.fallbackValue}$commaOrEmpty", assignmentContext.fallbackArgs)
     }
 
     override fun maybeCheckForNull(
@@ -163,7 +175,8 @@ open class SimpleDtoMembersStrategy(
         val propertyName = rootDtoMembersStrategy.toPropertyName(variableElement)
         val assignmentContext = assignmentCtxForToPatched(propertyName)
         val maybeNullFallback = maybeCheckForNull(variableElement, assignmentContext)
-        return DtoMembersStrategy.Statement("      $propertyName = this.$propertyName${maybeNullFallback.fallbackValue}$commaOrEmpty")
+        val maybeNamedParam = if(annotatedElementInfo.primaryTargetTypeElement.isKotlin()) "$propertyName = " else ""
+        return DtoMembersStrategy.Statement("      ${maybeNamedParam}this.$propertyName${maybeNullFallback.fallbackValue}$commaOrEmpty")
     }
 
 
@@ -172,7 +185,8 @@ open class SimpleDtoMembersStrategy(
     ): DtoMembersStrategy.Statement? {
         val assignmentContext = assignmentCtxForToAltConstructor(propertyName)
         val maybeNullFallback = maybeCheckForNull(variableElement, assignmentContext)
-        return DtoMembersStrategy.Statement("      $propertyName = original.$propertyName${maybeNullFallback.fallbackValue}$commaOrEmpty", maybeNullFallback.fallbackArgs)
+        val maybeNamedParam = if(annotatedElementInfo.primaryTargetTypeElement.isKotlin()) "$propertyName = " else ""
+        return DtoMembersStrategy.Statement("      ${maybeNamedParam}original.$propertyName${maybeNullFallback.fallbackValue}$commaOrEmpty", maybeNullFallback.fallbackArgs)
     }
 
     override fun toCreatorStatement(
@@ -184,7 +198,8 @@ open class SimpleDtoMembersStrategy(
     ): DtoMembersStrategy.Statement? {
         val assignmentContext = assignmentCtxForOwnCreator(propertyName)
         val maybeNullFallback = maybeCheckForNull(variableElement, assignmentContext)
-        return DtoMembersStrategy.Statement("      $propertyName = original.$propertyName${maybeNullFallback.fallbackValue}$commaOrEmpty", maybeNullFallback.fallbackArgs)
+        val maybeNamedParam = if(annotatedElementInfo.primaryTargetTypeElement.isKotlin()) "$propertyName = " else ""
+        return DtoMembersStrategy.Statement("      ${maybeNamedParam}original.$propertyName${maybeNullFallback.fallbackValue}$commaOrEmpty", maybeNullFallback.fallbackArgs)
     }
 
     override fun processDtoOnlyFields(
