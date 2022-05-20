@@ -256,40 +256,41 @@ interface ProcessingEnvironmentAware {
      * Converts this element to a [TypeName], ensuring that Java types
      * such as [java.lang.String] are converted to their Kotlin equivalent.
      */
-    fun Element.asKotlinTypeName(): TypeName = asType().asKotlinTypeName()
+    fun Element.asKotlinTypeName(forceMutableCollection: Boolean = false): TypeName = asType().asKotlinTypeName(forceMutableCollection)
 
     /**
      * Converts this element to a [TypeName], ensuring that Java types
      * such as [java.lang.String] are converted to their Kotlin equivalent.
      */
-    fun VariableElement.asKotlinTypeName(): TypeName {
-        val typeName = asType().asKotlinTypeName()
+    fun VariableElement.asKotlinTypeName(forceMutableCollection: Boolean = false): TypeName {
+        val typeName = asType().asKotlinTypeName(forceMutableCollection)
         return if (this.isNullable()) typeName.copy(nullable = true) else typeName
     }
 
-    fun TypeName.asKotlinTypeName(): TypeName {
+    fun TypeName.asKotlinTypeName(forceMutableCollection: Boolean = false): TypeName {
         return if (this is ParameterizedTypeName) {
-            val className = rawType.asKotlinTypeName() as ClassName
-            className.parameterizedBy(*typeArguments.map { it.asKotlinTypeName() }.toTypedArray())
+            val className = rawType.asKotlinTypeName(forceMutableCollection) as ClassName
+            className.parameterizedBy(*typeArguments.map { it.asKotlinTypeName(forceMutableCollection) }.toTypedArray())
         } else {
             processingEnvironment.elementUtils.getTypeElement(this.toString())
-                .asKotlinClassName()
+                .asKotlinClassName(forceMutableCollection)
         }
     }
 
     /** Converts this TypeMirror to a [TypeName], ensuring that java types such as [java.lang.String] are converted to their Kotlin equivalent. */
-    fun TypeMirror.asKotlinTypeName(): TypeName {
+    fun TypeMirror.asKotlinTypeName(forceMutableCollection: Boolean = false): TypeName {
         return when (this) {
-            is PrimitiveType -> processingEnvironment.typeUtils.boxedClass(this as PrimitiveType?).asKotlinClassName()
+            is PrimitiveType -> processingEnvironment.typeUtils.boxedClass(this as PrimitiveType?)
+                .asKotlinClassName(forceMutableCollection)
             is ArrayType -> {
                 return ClassName("kotlin", "Array")
-                    .parameterizedBy(this.componentType.asKotlinTypeName())
+                    .parameterizedBy(this.componentType.asKotlinTypeName(forceMutableCollection))
             }
             is DeclaredType -> {
-                val typeName = this.asTypeElement().asKotlinClassName()
+                val typeName = this.asTypeElement().asKotlinClassName(forceMutableCollection)
                 return if (this.typeArguments.isNotEmpty())
                     typeName.parameterizedBy(*typeArguments
-                        .mapNotNull { it.asKotlinTypeName() }
+                        .mapNotNull { it.asKotlinTypeName(forceMutableCollection) }
                         .toTypedArray())
                 else typeName
             }
@@ -301,23 +302,32 @@ interface ProcessingEnvironmentAware {
      * Converts this element to a [ClassName], ensuring that java types such as [java.lang.String]
      * are converted to their Kotlin equivalent.
      */
-    fun TypeElement.asKotlinClassName(): ClassName {
+    fun TypeElement.asKotlinClassName(forceMutableCollection: Boolean = false): ClassName {
         val className = asClassName()
         return try {
             // ensure that java.lang.* and java.util.* etc classes are converted to their kotlin equivalents
-            Class.forName(className.canonicalName).kotlin.asClassName()
+            var className = Class.forName(className.canonicalName).kotlin.asClassName()
+            if(this.isIterable()){
+                className = ClassName(className.packageName, "Mutable${className.simpleName}")
+            }
+            className
         } catch (e: ClassNotFoundException) {
             // probably part of the same source tree as the annotated class
             className
         }
     }
 
+    fun TypeElement.isIterable(): Boolean = this.isAssignableTo(Iterable::class.java, true)
+
+    fun VariableElement.isIterable(): Boolean = this.asType().asTypeElement().isIterable()
+
+
     /**
      * Returns true if this element is a subtype of the [targetType], false otherwise.
      * Note that any type is a sub-type of itself.
      * @param erasure whether to use the raw VS the generic [targetType]
      */
-    fun TypeElement.isSunTypeOf(targetType: Class<*>, erasure: Boolean = false): Boolean {
+    fun TypeElement.isSubTypeOf(targetType: Class<*>, erasure: Boolean = false): Boolean {
         val targetTypeMirror: TypeMirror =
             processingEnvironment.elementUtils.getTypeElement(targetType.canonicalName).asType()
         return processingEnvironment.typeUtils.isSubtype(

@@ -25,6 +25,7 @@ interface DtoMembersStrategy : ProcessingEnvironmentAware {
         get() = annotatedElementInfo.processingEnvironment
 
 
+    fun useMutableIterables(): Boolean = false
     fun defaultNullable(): Boolean = true
     fun defaultMutable(): Boolean = true
 

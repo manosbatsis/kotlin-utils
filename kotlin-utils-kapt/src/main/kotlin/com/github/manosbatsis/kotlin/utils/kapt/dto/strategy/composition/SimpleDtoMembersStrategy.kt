@@ -65,6 +65,14 @@ open class SimpleDtoMembersStrategy(
         CodeBlock.builder().addStatement("return ${dtoNameStrategy.getClassName().simpleName}(")
     }
 
+    protected fun maybeToMutableCollectionSuffix(
+        variableElement: VariableElement
+    ): String {
+        return if(useMutableIterables() && variableElement.isIterable())
+            "${if(toPropertyTypeName(variableElement).isNullable) "?." else "."}toMutable${variableElement.asType().asTypeElement().simpleName}()"
+        else ""
+    }
+
     protected fun assignmentCtxForToTargetType(
         fromTypeName: TypeName,
         toVariableElement: VariableElement
@@ -122,7 +130,7 @@ open class SimpleDtoMembersStrategy(
             variableElement.simpleName.toString()
 
     override fun toPropertyTypeName(variableElement: VariableElement): TypeName =
-            variableElement.asKotlinTypeName().copy(nullable = defaultNullable())
+            variableElement.asKotlinTypeName(useMutableIterables()).copy(nullable = defaultNullable())
 
     override fun toDefaultValueExpression(variableElement: VariableElement): Pair<String, Boolean>? {
         val mixinVariableElement = annotatedElementInfo.mixinTypeElementFields
@@ -186,7 +194,8 @@ open class SimpleDtoMembersStrategy(
         val assignmentContext = assignmentCtxForToAltConstructor(propertyName)
         val maybeNullFallback = maybeCheckForNull(variableElement, assignmentContext)
         val maybeNamedParam = if(annotatedElementInfo.primaryTargetTypeElement.isKotlin()) "$propertyName = " else ""
-        return DtoMembersStrategy.Statement("      ${maybeNamedParam}original.$propertyName${maybeNullFallback.fallbackValue}$commaOrEmpty", maybeNullFallback.fallbackArgs)
+        val toMutableSuffix = maybeToMutableCollectionSuffix(variableElement)
+        return DtoMembersStrategy.Statement("      ${maybeNamedParam}original.$propertyName$toMutableSuffix${maybeNullFallback.fallbackValue}$commaOrEmpty", maybeNullFallback.fallbackArgs)
     }
 
     override fun toCreatorStatement(
@@ -199,7 +208,8 @@ open class SimpleDtoMembersStrategy(
         val assignmentContext = assignmentCtxForOwnCreator(propertyName)
         val maybeNullFallback = maybeCheckForNull(variableElement, assignmentContext)
         val maybeNamedParam = if(annotatedElementInfo.primaryTargetTypeElement.isKotlin()) "$propertyName = " else ""
-        return DtoMembersStrategy.Statement("      ${maybeNamedParam}original.$propertyName${maybeNullFallback.fallbackValue}$commaOrEmpty", maybeNullFallback.fallbackArgs)
+        val toMutableSuffix = maybeToMutableCollectionSuffix(variableElement)
+        return DtoMembersStrategy.Statement("      ${maybeNamedParam}original.$propertyName$toMutableSuffix${maybeNullFallback.fallbackValue}$commaOrEmpty", maybeNullFallback.fallbackArgs)
     }
 
     override fun processDtoOnlyFields(
