@@ -1,5 +1,6 @@
 package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy
 
+import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementFieldInfo
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeSpec.Builder
@@ -22,10 +23,10 @@ interface DtoStrategy  {
     fun addMembers(typeSpecBuilder: Builder)
 
     /** Override to modify the fields to process, i.e. replicate for the DTO */
-    fun getFieldsToProcess(): List<VariableElement>
+    fun getFieldsToProcess(): List<AnnotatedElementFieldInfo>
 
     /** Override to modify the mixin fields added to the DTO */
-    fun getExtraFieldsFromMixin(): List<VariableElement>
+    fun getExtraFieldsFromMixin(): List<AnnotatedElementFieldInfo>
 
     /** The field names to include */
     fun getFieldIncludes(): List<String> = emptyList()
@@ -38,15 +39,15 @@ interface DtoStrategy  {
         // NO-OP
     }
 
-    fun List<VariableElement>.includeNames(includes: List<String> = emptyList()) =
-            if (includes.isEmpty()) this else filter { includes.contains(it.simpleName.toString()) }
+    fun List<AnnotatedElementFieldInfo>.includeNames(includes: List<String> = emptyList()) =
+            if (includes.isEmpty()) this else filter { includes.contains(it.variableElement.simpleName.toString()) }
 
-    fun List<VariableElement>.excludeNames(excludes: List<String> = emptyList()) =
-            if (excludes.isEmpty()) this else filterNot { excludes.contains(it.simpleName.toString()) }
+    fun List<AnnotatedElementFieldInfo>.excludeNames(excludes: List<String> = emptyList()) =
+            if (excludes.isEmpty()) this else filterNot { excludes.contains(it.variableElement.simpleName.toString()) }
 
-    fun List<VariableElement>.filtered() = includeNames(getFieldIncludes()).excludeNames(getFieldExcludes())
+    fun List<AnnotatedElementFieldInfo>.filtered() = includeNames(getFieldIncludes()).excludeNames(getFieldExcludes())
 
-    fun List<VariableElement>.toSimpleNames() = map { it.simpleName.toString() }
+    fun List<AnnotatedElementFieldInfo>.toSimpleNames() = map { it.variableElement.simpleName.toString() }
 
 }
 

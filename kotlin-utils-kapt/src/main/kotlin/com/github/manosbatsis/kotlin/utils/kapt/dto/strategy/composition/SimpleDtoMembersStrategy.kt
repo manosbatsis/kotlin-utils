@@ -4,10 +4,10 @@ import com.github.manosbatsis.kotlin.utils.ProcessingEnvironmentAware
 import com.github.manosbatsis.kotlin.utils.api.DefaultValue
 import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util.AssignmentContext
 import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util.FieldContext
+import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementFieldInfo
 import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 import com.squareup.kotlinpoet.*
 import javax.annotation.processing.ProcessingEnvironment
-import javax.lang.model.element.VariableElement
 
 /** Simple implementation of [DtoMembersStrategy] */
 open class SimpleDtoMembersStrategy(
@@ -40,12 +40,51 @@ open class SimpleDtoMembersStrategy(
     // Create patch function
     val patchFunctionBuilder by lazy { rootDtoMembersStrategy.getToPatchedFunctionBuilder(originalTypeParameter) }
     val patchFunctionCodeBuilder by lazy {
-        if (annotatedElementInfo.isNonDataClass)
+        val instanceInitBlock = if (annotatedElementInfo.isNonDataClass)
             CodeBlock.builder().addStatement("val patched = %T(", dtoTypeStrategy.getDtoTarget())
         else
             CodeBlock.builder().addStatement("val patched = original.copy(")
+        val instanceInitClosingBlock = CodeBlock.builder().addStatement(")")
+        val returnBlock = CodeBlock.builder().addStatement("return patched")
+        val instanceAltInitBlock = CodeBlock.builder().addStatement("val patched = original")
+        CreateOrUpdateInstanceFunctionBuilder(
+            instanceInitBlock = instanceInitBlock,
+            instanceInitClosingBlock = instanceInitClosingBlock,
+            returnBlock = returnBlock,
+            instanceAltInitBlock = instanceAltInitBlock)
     }
 
+    class CreateOrUpdateInstanceFunctionBuilder(
+        /** Target instance initialization using e.g. constructor or data class copy() */
+        val instanceInitBlock: CodeBlock.Builder,
+        /** Target instance initialization closing, typically a closing parenthesis */
+        val instanceInitClosingBlock: CodeBlock.Builder,
+        /** Return block */
+        val returnBlock: CodeBlock.Builder,
+        /** Used instead of the [instanceInitBlock] when [instanceInitArgsBlock] is empty */
+        val instanceAltInitBlock: CodeBlock.Builder? = null
+    ){
+        /** Stores statements used for constructor/copy parameters */
+        val instanceInitArgsBlock: CodeBlock.Builder = CodeBlock.builder()
+        /** Stores statements used for member mutations */
+        val instanceMutationsBlock: CodeBlock.Builder = CodeBlock.builder()
+
+        fun toCodeBlock(): CodeBlock {
+            val useAltInit = instanceInitArgsBlock.isEmpty() && instanceAltInitBlock != null
+            val code = CodeBlock.builder()
+            if(!useAltInit){
+                code.add(instanceInitBlock.build())
+                if(instanceInitArgsBlock.isNotEmpty())
+                    code.indent().add(instanceInitArgsBlock.build()).unindent()
+                code.add(instanceInitClosingBlock.build())
+            } else code.add(instanceAltInitBlock!!.build())
+
+            if(instanceMutationsBlock.isNotEmpty()) code
+                .add(instanceMutationsBlock.build())
+            if(returnBlock.isNotEmpty()) code.add(returnBlock.build())
+            return code.build()
+        }
+    }
 
     // Create mapping function
     val targetTypeFunctionBuilder by lazy { rootDtoMembersStrategy.getToTargetTypeFunctionBuilder() }
@@ -53,11 +92,24 @@ open class SimpleDtoMembersStrategy(
 
         val useTargetTypeName = annotatedElementInfo.toTargetTypeFunctionConfig.targetTypeNameOverride
                 ?: dtoTypeStrategy.getDtoTarget()
-        if (annotatedElementInfo.toTargetTypeFunctionConfig.skip)
+        val instanceInitBlock = if (annotatedElementInfo.toTargetTypeFunctionConfig.skip)
             CodeBlock.builder().addStatement("TODO(\"Not yet implemented\")")
         else
-            CodeBlock.builder().addStatement("   return %T(", useTargetTypeName)
+            CodeBlock.builder().addStatement("val instance = %T(", useTargetTypeName)
+
+        val instanceInitClosingBlock = if (annotatedElementInfo.toTargetTypeFunctionConfig.skip)
+            CodeBlock.builder()
+        else
+            CodeBlock.builder().addStatement(")")
+
+        val returnBlock = CodeBlock.builder().addStatement("return instance")
+
+        CreateOrUpdateInstanceFunctionBuilder(
+            instanceInitBlock = instanceInitBlock,
+            instanceInitClosingBlock = instanceInitClosingBlock,
+            returnBlock = returnBlock)
     }
+
     val companionObject by lazy { rootDtoMembersStrategy.getCompanionBuilder() }
 
     val creatorFunctionBuilder by lazy { rootDtoMembersStrategy.getCreatorFunctionBuilder(originalTypeParameter) }
@@ -66,20 +118,20 @@ open class SimpleDtoMembersStrategy(
     }
 
     protected fun maybeToMutableCollectionSuffix(
-        variableElement: VariableElement
+        fieldInfo: AnnotatedElementFieldInfo
     ): String {
-        return if(useMutableIterables() && variableElement.isIterable())
-            "${if(toPropertyTypeName(variableElement).isNullable) "?." else "."}toMutable${variableElement.asType().asTypeElement().simpleName}()"
+        return if(useMutableIterables() && fieldInfo.variableElement.isIterable())
+            "${if(toPropertyTypeName(fieldInfo).isNullable) "?." else "."}toMutable${fieldInfo.variableElement.asType().asTypeElement().simpleName}()"
         else ""
     }
 
     protected fun assignmentCtxForToTargetType(
         fromTypeName: TypeName,
-        toVariableElement: VariableElement
+        tofieldInfo: AnnotatedElementFieldInfo
     ): AssignmentContext{
-        val toTypeName = toVariableElement.asKotlinTypeName()
+        val toTypeName = tofieldInfo.variableElement.asKotlinTypeName()
         return if(fromTypeName.isNullable && !toTypeName.isNullable)
-            AssignmentContext.OUT.withFallbackValue(" ?: errNull(\"${toVariableElement.simpleName}\")")
+            AssignmentContext.OUT.withFallbackValue(" ?: errNull(\"${tofieldInfo.variableElement.simpleName}\")")
         else
             AssignmentContext.OUT.withFallbackValue("")
     }
@@ -88,9 +140,6 @@ open class SimpleDtoMembersStrategy(
     protected fun assignmentCtxForToTargetType(propertyName: String): AssignmentContext {
         return AssignmentContext.OUT.withFallbackValue(" ?: errNull(\"$propertyName\")")
     }
-
-    protected fun assignmentCtxForToPatched(propertyName: String): AssignmentContext =
-            AssignmentContext.OUT.withFallbackValue(" ?: original.$propertyName")
 
 
     protected fun assignmentCtxForToAltConstructor(propertyName: String): AssignmentContext =
@@ -122,30 +171,31 @@ open class SimpleDtoMembersStrategy(
         return TypeSpec.companionObjectBuilder()
     }
 
-    override fun addPropertyAnnotations(propertySpecBuilder: PropertySpec.Builder, variableElement: VariableElement) {
-        propertySpecBuilder.copyAnnotationsByBasePackage(variableElement, copyAnnotationPackages, AnnotationSpec.UseSiteTarget.FIELD)
+    override fun addPropertyAnnotations(propertySpecBuilder: PropertySpec.Builder, fieldInfo: AnnotatedElementFieldInfo) {
+        propertySpecBuilder.copyAnnotationsByBasePackage(fieldInfo.variableElement, copyAnnotationPackages, AnnotationSpec.UseSiteTarget.FIELD)
     }
 
-    override fun toPropertyName(variableElement: VariableElement): String =
-            variableElement.simpleName.toString()
+    override fun toPropertyName(fieldInfo: AnnotatedElementFieldInfo): String =
+        fieldInfo.variableElement.simpleName.toString()
 
-    override fun toPropertyTypeName(variableElement: VariableElement): TypeName =
-            variableElement.asKotlinTypeName(useMutableIterables()).copy(nullable = defaultNullable())
+    override fun toPropertyTypeName(fieldInfo: AnnotatedElementFieldInfo): TypeName =
+        fieldInfo.variableElement.asKotlinTypeName(useMutableIterables()).copy(nullable = defaultNullable())
 
-    override fun toDefaultValueExpression(variableElement: VariableElement): Pair<String, Boolean>? {
+    override fun toDefaultValueExpression(fieldInfo: AnnotatedElementFieldInfo): Pair<String, Boolean>? {
         val mixinVariableElement = annotatedElementInfo.mixinTypeElementFields
-                .find { it.simpleName == variableElement.simpleName }
+                .find { it.variableElement.simpleName == fieldInfo.variableElement.simpleName }
 
-        return listOfNotNull(mixinVariableElement, variableElement)
-                .mapNotNull { rootDtoMembersStrategy.findDefaultValueAnnotationValue(it) }
+        return listOfNotNull(mixinVariableElement, fieldInfo)
+                .mapNotNull { rootDtoMembersStrategy.findDefaultValueAnnotationValue(it, annotatedElementInfo) }
                 .firstOrNull()
-        // Null if nullable, no default value otherwise
-                ?: if (rootDtoMembersStrategy.toPropertyTypeName(variableElement).isNullable) Pair("null", true) else null
+                // Null if nullable, no default value otherwise
+                ?: if (rootDtoMembersStrategy.toPropertyTypeName(fieldInfo).isNullable) Pair("null", true) else null
     }
 
     override fun findDefaultValueAnnotationValue(
-            variableElement: VariableElement
-    ): Pair<String, Boolean>? = variableElement.annotationMirrors
+            fieldInfo: AnnotatedElementFieldInfo,
+            annotatedElementInfo: AnnotatedElementInfo
+    ): Pair<String, Boolean>? = fieldInfo.variableElement.annotationMirrors
             .find { it.annotationType.asElement().simpleName.toString() == DefaultValue::class.java.simpleName }
             ?.let {
                 it.findAnnotationValue("value")!!.value.toString() to
@@ -153,102 +203,177 @@ open class SimpleDtoMembersStrategy(
             }
 
 
-    override fun toTargetTypeStatement(fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String): DtoMembersStrategy.Statement? {
-        val propertyName = rootDtoMembersStrategy.toPropertyName(variableElement)
-        val assignmentContext = assignmentCtxForToTargetType(rootDtoMembersStrategy.toPropertyTypeName(variableElement), variableElement)
-        val maybeNamedParam = if(annotatedElementInfo.primaryTargetTypeElement.isKotlin()) "$propertyName = " else ""
-        return DtoMembersStrategy.Statement("      ${maybeNamedParam}this.$propertyName${assignmentContext.fallbackValue}$commaOrEmpty", assignmentContext.fallbackArgs)
+    override fun toTargetTypeStatement(
+        fieldIndex: Int,
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo,
+        commaOrEmpty: String
+    ): DtoMembersStrategy.Statement? {
+        val propertyName = rootDtoMembersStrategy.toPropertyName(fieldInfo)
+        val assignmentContext = assignmentCtxForToTargetType(rootDtoMembersStrategy.toPropertyTypeName(fieldInfo), fieldInfo)
+        val maybeNamedParam = if(annotatedElementInfo.primaryTargetTypeElement.isKotlin() || !fieldInfo.isConstructorParam) "$propertyName = " else ""
+        return DtoMembersStrategy.Statement("${maybeNamedParam}this.$propertyName${assignmentContext.fallbackValue}$commaOrEmpty", assignmentContext.fallbackArgs)
     }
 
     override fun maybeCheckForNull(
-            variableElement: VariableElement,
+            fieldInfo: AnnotatedElementFieldInfo,
             assignmentContext: AssignmentContext
     ): AssignmentContext {
-        val isSourceNotNull = rootDtoMembersStrategy.isNonNull(variableElement, assignmentContext.source)
-        val isTargetNullable = rootDtoMembersStrategy.isNullable(variableElement, assignmentContext.target)
+        val isSourceNotNull = rootDtoMembersStrategy.isNonNull(fieldInfo, assignmentContext.source)
+        val isTargetNullable = rootDtoMembersStrategy.isNullable(fieldInfo, assignmentContext.target)
         return if (isSourceNotNull || isTargetNullable) AssignmentContext.EMPTY
         else assignmentContext
     }
 
     override fun isNullable(
-            variableElement: VariableElement, fieldContext: FieldContext
+            fieldInfo: AnnotatedElementFieldInfo, fieldContext: FieldContext
     ): Boolean = when (fieldContext) {
-        FieldContext.GENERATED_TYPE -> rootDtoMembersStrategy.toPropertyTypeName(variableElement).isNullable
-        FieldContext.TARGET_TYPE -> variableElement.isNullable()
+        FieldContext.GENERATED_TYPE -> rootDtoMembersStrategy.toPropertyTypeName(fieldInfo).isNullable
+        FieldContext.TARGET_TYPE -> fieldInfo.variableElement.isNullable()
         FieldContext.MIXIN_TYPE -> true
     }
 
 
-    override fun toPatchStatement(fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String): DtoMembersStrategy.Statement? {
-        val propertyName = rootDtoMembersStrategy.toPropertyName(variableElement)
-        val assignmentContext = assignmentCtxForToPatched(propertyName)
-        val maybeNullFallback = maybeCheckForNull(variableElement, assignmentContext)
-        val maybeNamedParam = if(annotatedElementInfo.primaryTargetTypeElement.isKotlin()) "$propertyName = " else ""
-        return DtoMembersStrategy.Statement("      ${maybeNamedParam}this.$propertyName${maybeNullFallback.fallbackValue}$commaOrEmpty")
+    override fun toPatchStatement(
+        fieldIndex: Int,
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo,
+        commaOrEmpty: String
+    ): DtoMembersStrategy.Statement? {
+        return when{
+            fieldInfo.isConstructorParam
+                    && annotatedElementInfo.updateRequiresNewInstance->
+                rootDtoMembersStrategy.toConstructorOrCopyPatchStatement(fieldIndex, fieldInfo, annotatedElementInfo, commaOrEmpty)
+            else -> rootDtoMembersStrategy.toMutationPatchStatement(fieldIndex, fieldInfo, annotatedElementInfo)
+        }
+    }
+
+
+    override fun toConstructorOrCopyPatchStatement(
+        fieldIndex: Int,
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo,
+        commaOrEmpty: String
+    ): DtoMembersStrategy.Statement? {
+        val propertyName = rootDtoMembersStrategy.toPropertyName(fieldInfo)
+        val maybeNamedParam = if(annotatedElementInfo.primaryTargetTypeElement.isKotlin() || !fieldInfo.isConstructorParam) "" +
+                "$propertyName = " else ""
+        val isUpdatable = annotatedElementInfo.isUpdatable(fieldInfo)
+        val maybeAndIfEmpty = if(fieldInfo.variableElement.isIterable()) " && this.${propertyName}!!.isNotEmpty()" else ""
+        return if(fieldInfo.isMutableVariable)
+            if(isUpdatable || annotatedElementInfo.updateRequiresNewInstance)
+                DtoMembersStrategy.Statement("${maybeNamedParam}if(this.$propertyName != null$maybeAndIfEmpty) this.$propertyName!! else original.$propertyName$commaOrEmpty")
+            else DtoMembersStrategy.Statement("${maybeNamedParam}errNonUpdatableOrOriginalValue(\"$propertyName\", this.$propertyName, original.$propertyName)$commaOrEmpty")
+        else DtoMembersStrategy.Statement("// Ignored since immutable and not part of constructor: $propertyName")
+    }
+
+    override fun toMutationPatchStatement(
+        fieldIndex: Int,
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo
+    ): DtoMembersStrategy.Statement {
+        val propertyName = rootDtoMembersStrategy.toPropertyName(fieldInfo)
+        val maybeAndIfEmpty = if(fieldInfo.variableElement.isIterable()) " && this.${propertyName}!!.isNotEmpty()" else ""
+        val isUpdatable = annotatedElementInfo.isUpdatable(fieldInfo)
+        return if(isUpdatable)
+            DtoMembersStrategy.Statement("if(this.$propertyName != null$maybeAndIfEmpty) patched.$propertyName = this.$propertyName!!")
+        else DtoMembersStrategy.Statement("errNonUpdatableOrOriginalValue(\"$propertyName\", this.$propertyName, original.$propertyName)")
     }
 
 
     override fun toAltConstructorStatement(
-            fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String
+            fieldIndex: Int,
+            fieldInfo: AnnotatedElementFieldInfo,
+            annotatedElementInfo: AnnotatedElementInfo,
+            propertyName: String,
+            propertyType: TypeName,
+            commaOrEmpty: String
     ): DtoMembersStrategy.Statement? {
         val assignmentContext = assignmentCtxForToAltConstructor(propertyName)
-        val maybeNullFallback = maybeCheckForNull(variableElement, assignmentContext)
+        val maybeNullFallback = maybeCheckForNull(fieldInfo, assignmentContext)
         val maybeNamedParam = if(annotatedElementInfo.primaryTargetTypeElement.isKotlin()) "$propertyName = " else ""
-        val toMutableSuffix = maybeToMutableCollectionSuffix(variableElement)
+        val toMutableSuffix = maybeToMutableCollectionSuffix(fieldInfo)
         return DtoMembersStrategy.Statement("      ${maybeNamedParam}original.$propertyName$toMutableSuffix${maybeNullFallback.fallbackValue}$commaOrEmpty", maybeNullFallback.fallbackArgs)
     }
 
     override fun toCreatorStatement(
             fieldIndex: Int,
-            variableElement: VariableElement,
+            fieldInfo: AnnotatedElementFieldInfo,
+            annotatedElementInfo: AnnotatedElementInfo,
             propertyName: String,
             propertyType: TypeName,
             commaOrEmpty: String
     ): DtoMembersStrategy.Statement? {
         val assignmentContext = assignmentCtxForOwnCreator(propertyName)
-        val maybeNullFallback = maybeCheckForNull(variableElement, assignmentContext)
+        val maybeNullFallback = maybeCheckForNull(fieldInfo, assignmentContext)
         val maybeNamedParam = if(annotatedElementInfo.primaryTargetTypeElement.isKotlin()) "$propertyName = " else ""
-        val toMutableSuffix = maybeToMutableCollectionSuffix(variableElement)
+        val toMutableSuffix = maybeToMutableCollectionSuffix(fieldInfo)
         return DtoMembersStrategy.Statement("      ${maybeNamedParam}original.$propertyName$toMutableSuffix${maybeNullFallback.fallbackValue}$commaOrEmpty", maybeNullFallback.fallbackArgs)
     }
 
     override fun processDtoOnlyFields(
             typeSpecBuilder: TypeSpec.Builder,
-            fields: List<VariableElement>
+            annotatedElementInfo: AnnotatedElementInfo,
+            fields: List<AnnotatedElementFieldInfo>
     ) {
         fields.forEachIndexed { fieldIndex, originalProperty ->
-            val (propertyName, propertyType) =
-                    rootDtoMembersStrategy.addProperty(originalProperty, fieldIndex, typeSpecBuilder, fields)
-            rootDtoMembersStrategy.fieldProcessed(fieldIndex, originalProperty, propertyName, propertyType)
+            val (propertyName, propertyType) = rootDtoMembersStrategy.addProperty(
+                originalProperty, annotatedElementInfo, fieldIndex, typeSpecBuilder, fields)
+            rootDtoMembersStrategy.fieldProcessed(fieldIndex, originalProperty, annotatedElementInfo, propertyName, propertyType)
         }
     }
 
     override fun processFields(
             typeSpecBuilder: TypeSpec.Builder,
-            fields: List<VariableElement>
+            annotatedElementInfo: AnnotatedElementInfo,
+            fields: List<AnnotatedElementFieldInfo>
     ) {
-        fields.forEachIndexed { fieldIndex, originalProperty ->
-            val commaOrEmpty = if (fieldIndex + 1 < fields.size) "," else ""
+        val fieldsInScope = fields.filter { it.isInAnnotationScope }
+        val constructorParamsInScope = fieldsInScope.filter { it.isConstructorParam }
+        var constructorParamsAdded = 0
+        fieldsInScope.forEachIndexed { fieldIndex, originalProperty ->
+            if(originalProperty.isConstructorParam) constructorParamsAdded++
+            val commaOrEmpty = if (constructorParamsAdded < constructorParamsInScope.size && originalProperty.isConstructorParam) "," else ""
             // Tell KotlinPoet that the property is initialized via the constructor parameter,
             // by creating both a constructor param and member property
-            val (propertyName, propertyType) = rootDtoMembersStrategy.addProperty(originalProperty, fieldIndex, typeSpecBuilder, fields)
+            val (propertyName, propertyType) = rootDtoMembersStrategy.addProperty(
+                originalProperty,
+                annotatedElementInfo,
+                fieldIndex,
+                typeSpecBuilder,
+                fields
+            )
             // TODO: just separate and decouple the darn component builders already
             // Add line to patch function
-            patchFunctionCodeBuilder.addStatement(rootDtoMembersStrategy.toPatchStatement(fieldIndex, originalProperty, commaOrEmpty))
+            val targetBlockForPatch = when{
+                originalProperty.isConstructorParam && annotatedElementInfo.updateRequiresNewInstance
+                    -> patchFunctionCodeBuilder.instanceInitArgsBlock
+                else -> patchFunctionCodeBuilder.instanceMutationsBlock
+            }
+            targetBlockForPatch.addStatement(rootDtoMembersStrategy
+                .toPatchStatement(fieldIndex, originalProperty, annotatedElementInfo, commaOrEmpty))
+
             // Add line to map function
-            targetTypeFunctionCodeBuilder.addStatement(
+            val toTargetTypeCodeBuilder = if(originalProperty.isConstructorParam)
+                targetTypeFunctionCodeBuilder.instanceInitArgsBlock
+            else if(originalProperty.isMutableVariable) targetTypeFunctionCodeBuilder.instanceMutationsBlock
+            else null
+            toTargetTypeCodeBuilder?.addStatement(
                     rootDtoMembersStrategy.toTargetTypeStatement(
                             fieldIndex,
                             originalProperty,
+                            annotatedElementInfo,
                             commaOrEmpty))
+
             // Add line to alt constructor
             dtoAltConstructorCodeBuilder.addStatement(
                     rootDtoMembersStrategy.toAltConstructorStatement(
                             fieldIndex,
                             originalProperty,
+                            annotatedElementInfo,
                             propertyName,
                             propertyType,
-                            commaOrEmpty
+                            if(fieldIndex + 1 < fieldsInScope.size) "," else ""
                     )
             )
             // Add line to create
@@ -256,21 +381,23 @@ open class SimpleDtoMembersStrategy(
                     rootDtoMembersStrategy.toCreatorStatement(
                             fieldIndex,
                             originalProperty,
+                            annotatedElementInfo,
                             propertyName,
                             propertyType,
-                            commaOrEmpty
+                            if(fieldIndex + 1 < fieldsInScope.size) "," else ""
                     )
             )
             //
-            rootDtoMembersStrategy.fieldProcessed(fieldIndex, originalProperty, propertyName, propertyType)
+            rootDtoMembersStrategy.fieldProcessed(fieldIndex, originalProperty, annotatedElementInfo, propertyName, propertyType)
         }
     }
 
     override fun addProperty(
-            originalProperty: VariableElement,
+            originalProperty: AnnotatedElementFieldInfo,
+            annotatedElementInfo: AnnotatedElementInfo,
             fieldIndex: Int,
             typeSpecBuilder: TypeSpec.Builder,
-            fields: List<VariableElement>
+            fields: List<AnnotatedElementFieldInfo>
     ): Pair<String, TypeName> {
         val propertyName = rootDtoMembersStrategy.toPropertyName(originalProperty)
         val propertyDefaults = rootDtoMembersStrategy.toDefaultValueExpression(originalProperty)
@@ -284,7 +411,8 @@ open class SimpleDtoMembersStrategy(
                 ParameterSpec.builder(propertyName, propertyType)
                         .apply { propertyDefaults?.first?.let { defaultValue(it) } }.build()
         )
-        val propertySpecBuilder = rootDtoMembersStrategy.toPropertySpecBuilder(fieldIndex, originalProperty, propertyName, propertyType)
+        val propertySpecBuilder = rootDtoMembersStrategy.toPropertySpecBuilder(
+            fieldIndex, originalProperty, annotatedElementInfo, propertyName, propertyType)
         rootDtoMembersStrategy.addPropertyAnnotations(propertySpecBuilder, originalProperty)
         typeSpecBuilder.addProperty(propertySpecBuilder.build())
         return Pair(propertyName, propertyType)
@@ -293,7 +421,8 @@ open class SimpleDtoMembersStrategy(
     /** Override to add additional functionality to your [DtoMembersStrategy] implementation */
     override fun fieldProcessed(
             fieldIndex: Int,
-            originalProperty: VariableElement,
+            originalProperty: AnnotatedElementFieldInfo,
+            annotatedElementInfo: AnnotatedElementInfo,
             propertyName: String,
             propertyType: TypeName
     ) {
@@ -301,7 +430,11 @@ open class SimpleDtoMembersStrategy(
     }
 
     override fun toPropertySpecBuilder(
-            fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName
+            fieldIndex: Int,
+            fieldInfo: AnnotatedElementFieldInfo,
+            annotatedElementInfo: AnnotatedElementInfo,
+            propertyName: String,
+            propertyType: TypeName
     ): PropertySpec.Builder = PropertySpec.builder(propertyName, propertyType)
             .mutable(defaultMutable())
             .addModifiers(KModifier.PUBLIC)
@@ -351,16 +484,8 @@ open class SimpleDtoMembersStrategy(
                 .callThisConstructor(dtoAltConstructorCodeBuilder.build())
         rootDtoMembersStrategy.addAltConstructor(typeSpecBuilder, dtoAltConstructorBuilder)
         // Complete creator function
-
-        // Complete creator function
         creatorFunctionCodeBuilder.addStatement(")")
-        //creatorFunctionCodeBuilder.addStatement("return dto")
-        // Complete patch function
-        patchFunctionCodeBuilder.addStatement(")")
-        patchFunctionCodeBuilder.addStatement("return patched")
-        // Complete mapping function
-        if (!annotatedElementInfo.toTargetTypeFunctionConfig.skip)
-            targetTypeFunctionCodeBuilder.addStatement("   )")
+
         // Add functions
         typeSpecBuilder
                 .primaryConstructor(dtoConstructorBuilder.build())
@@ -369,8 +494,8 @@ open class SimpleDtoMembersStrategy(
                                 .addStatement(creatorFunctionCodeBuilder.build().toString())
                                 .build()
                 ).build())
-        typeSpecBuilder.addFunction(patchFunctionBuilder.addCode(patchFunctionCodeBuilder.build()).build())
-        typeSpecBuilder.addFunction(targetTypeFunctionBuilder.addCode(targetTypeFunctionCodeBuilder.build()).build())
+        typeSpecBuilder.addFunction(patchFunctionBuilder.addCode(patchFunctionCodeBuilder.toCodeBlock()).build())
+        typeSpecBuilder.addFunction(targetTypeFunctionBuilder.addCode(targetTypeFunctionCodeBuilder.toCodeBlock()).build())
     }
 
     override fun addAltConstructor(typeSpecBuilder: TypeSpec.Builder, dtoAltConstructorBuilder: FunSpec.Builder) {

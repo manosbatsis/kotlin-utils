@@ -60,4 +60,20 @@ class GetterAsFieldAdapter(
         return "${this.javaClass.simpleName}(actual = ${actual})"
     }
 
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as GetterAsFieldAdapter
+
+        if (actual != other.actual) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        return actual.hashCode()
+    }
+
+
 }

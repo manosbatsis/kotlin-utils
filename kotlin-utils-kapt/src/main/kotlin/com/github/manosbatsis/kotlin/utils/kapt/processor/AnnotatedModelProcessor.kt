@@ -8,7 +8,6 @@ import javax.annotation.processing.AbstractProcessor
 import javax.annotation.processing.ProcessingEnvironment
 import javax.annotation.processing.RoundEnvironment
 import javax.lang.model.element.*
-import javax.lang.model.util.ElementFilter
 
 interface AnnotatedElementInfoProcessor : AnnotationProcessorBase{
     fun processElementInfos(elementInfos: List<AnnotatedElementInfo>)
@@ -60,11 +59,11 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
 
             annotation: AnnotationMirror,
             primaryTargetTypeElement: TypeElement,
-            primaryTargetTypeElementFields: List<VariableElement>,
+            primaryTargetTypeElementFields: List<AnnotatedElementFieldInfo>,
             secondaryTargetTypeElement: TypeElement?,
-            secondaryTargetTypeElementFields: List<VariableElement>,
+            secondaryTargetTypeElementFields: List<AnnotatedElementFieldInfo>,
             mixinTypeElement: TypeElement?,
-            mixinTypeElementFields: List<VariableElement>,
+            mixinTypeElementFields: List<AnnotatedElementFieldInfo>,
             copyAnnotationPackages: List<String> = getStringValuesList(annotation, ANN_ATTR_COPY_ANNOTATION_PACKAGES),
             ignoreProperties: List<String> = getStringValuesList(annotation, ANN_ATTR_CIGNORE_PROPS),
             nonUpdatableProperties: List<String> = emptyList(),
@@ -100,13 +99,13 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
                         when {
                             isMixinAnnotation(annotationGroup.key.canonicalName) -> annotatedElementInfoForMixin(
                                     mixinTypeElement = typeElement,
-                                    mixinTypeElementFields = typeElement.accessibleConstructorParameterFields(true)
-                                            .filterNot { fieldNameExclusions.contains("${it.simpleName}") },
+                                    mixinTypeElementFields = getFieldInfos(typeElement)
+                                            .filterNot { fieldNameExclusions.contains("${it.variableElement.simpleName}") },
                                     annotation = annotation)
                             else -> annotatedElementInfo(
                                     primaryTargetTypeElement = typeElement,
-                                    primaryTargetTypeElementFields = typeElement.accessibleConstructorParameterFields(true)
-                                            .filterNot { fieldNameExclusions.contains("${it.simpleName}") },
+                                    primaryTargetTypeElementFields = getFieldInfos(typeElement)
+                                        .filterNot { fieldNameExclusions.contains("${it.variableElement.simpleName}") },
                                     annotation = annotation)
                         }
                     }
@@ -114,13 +113,13 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
                         val executableElement = annotatedElement as ExecutableElement
                         if (isMixinAnnotation(annotationGroup.key.canonicalName)) annotatedElementInfoForMixin(
                                 mixinTypeElement = executableElement.enclosingElement as TypeElement,
-                                mixinTypeElementFields = executableElement.parameters
-                                        .filterNot { fieldNameExclusions.contains("${it.simpleName}") },
+                                mixinTypeElementFields = getFieldInfos(executableElement)
+                                        .filterNot { fieldNameExclusions.contains("${it.variableElement.simpleName}") },
                                 annotation = annotation)
                         else annotatedElementInfo(
                                 primaryTargetTypeElement = executableElement.enclosingElement as TypeElement,
-                                primaryTargetTypeElementFields = executableElement.parameters
-                                        .filterNot { fieldNameExclusions.contains("${it.simpleName}") },
+                                primaryTargetTypeElementFields = getFieldInfos(executableElement)
+                                        .filterNot { fieldNameExclusions.contains("${it.variableElement.simpleName}") },
                                 annotation = annotation)
                     }
                     else -> throw IllegalArgumentException("Invalid element type, expected a class or constructor")
@@ -135,9 +134,9 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
 
     fun annotatedElementInfo(
             primaryTargetTypeElement: TypeElement,
-            primaryTargetTypeElementFields: List<VariableElement>,
+            primaryTargetTypeElementFields: List<AnnotatedElementFieldInfo>,
             mixinTypeElement: TypeElement? = null,
-            mixinTypeElementFields: List<VariableElement> = emptyList(),
+            mixinTypeElementFields: List<AnnotatedElementFieldInfo> = emptyList(),
             annotation: AnnotationMirror
     ): AnnotatedElementInfo {
 
@@ -145,9 +144,9 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
             annotation.findValueAsTypeElement(it)
         }
 
-        val secondaryTargetTypeElementFields = if (secondaryTargetTypeElement != null) ElementFilter.fieldsIn(
-                processingEnvironment.elementUtils.getAllMembers(secondaryTargetTypeElement)).fieldsOnly()
-                .filterNot { getFieldNameExclusions().contains("${it.simpleName}") } else emptyList()
+        val secondaryTargetTypeElementFields = if (secondaryTargetTypeElement != null)
+            getFieldInfos(secondaryTargetTypeElement)
+                .filterNot { getFieldNameExclusions().contains("${it.variableElement.simpleName}") } else emptyList()
 
         return annotatedElementInfo(
                 annotation = annotation,
@@ -162,19 +161,19 @@ interface AnnotationProcessorBase: ProcessingEnvironmentAware{
 
     fun annotatedElementInfoForMixin(
             mixinTypeElement: TypeElement,
-            mixinTypeElementFields: List<VariableElement>,
+            mixinTypeElementFields: List<AnnotatedElementFieldInfo>,
             annotation: AnnotationMirror
     ): AnnotatedElementInfo {
+        val fieldNameExclusions = getFieldNameExclusions()
         val annotationTargetTypeAttr = primaryTargetRefAnnotationName ?: error("Not a mixin")
         val primaryTargetTypeElement: TypeElement = annotation.getValueAsTypeElement(annotationTargetTypeAttr)
-        val primaryTargetTypeElementFields = ElementFilter.fieldsIn(
-                processingEnvironment.elementUtils.getAllMembers(primaryTargetTypeElement)).fieldsOnly()
-                .filterNot { getFieldNameExclusions().contains("${it.simpleName}") }
+
         return annotatedElementInfo(
                 annotation = annotation,
                 primaryTargetTypeElement = primaryTargetTypeElement,
-                primaryTargetTypeElementFields = primaryTargetTypeElementFields,
-                mixinTypeElement = mixinTypeElement,
+                primaryTargetTypeElementFields = getFieldInfos(primaryTargetTypeElement)
+                    .filterNot { fieldNameExclusions.contains("${it.variableElement.simpleName}") },
+            mixinTypeElement = mixinTypeElement,
                 mixinTypeElementFields = mixinTypeElementFields
         )
     }
@@ -216,11 +215,11 @@ abstract class AbstractAnnotatedModelInfoProcessor(
     override fun annotatedElementInfo(
             annotation: AnnotationMirror,
             primaryTargetTypeElement: TypeElement,
-            primaryTargetTypeElementFields: List<VariableElement>,
+            primaryTargetTypeElementFields: List<AnnotatedElementFieldInfo>,
             secondaryTargetTypeElement: TypeElement?,
-            secondaryTargetTypeElementFields: List<VariableElement>,
+            secondaryTargetTypeElementFields: List<AnnotatedElementFieldInfo>,
             mixinTypeElement: TypeElement?,
-            mixinTypeElementFields: List<VariableElement>,
+            mixinTypeElementFields: List<AnnotatedElementFieldInfo>,
             copyAnnotationPackages: List<String>,
             ignoreProperties: List<String>,
             nonUpdatableProperties: List<String>,

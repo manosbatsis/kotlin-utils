@@ -3,6 +3,7 @@ package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.composition
 import com.github.manosbatsis.kotlin.utils.ProcessingEnvironmentAware
 import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util.AssignmentContext
 import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util.FieldContext
+import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementFieldInfo
 import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.TypeSpec.Builder
@@ -30,7 +31,11 @@ interface DtoMembersStrategy : ProcessingEnvironmentAware {
     fun defaultMutable(): Boolean = true
 
     /** Override to modify processing of individual fields */
-    fun processFields(typeSpecBuilder: Builder, fields: List<VariableElement>)
+    fun processFields(
+        typeSpecBuilder: Builder,
+        annotatedElementInfo: AnnotatedElementInfo,
+        fields: List<AnnotatedElementFieldInfo>
+    )
 
     /**
      * Override to modify processing of DTO-specific fields,
@@ -38,35 +43,94 @@ interface DtoMembersStrategy : ProcessingEnvironmentAware {
      */
     fun processDtoOnlyFields(
             typeSpecBuilder: TypeSpec.Builder,
-            fields: List<VariableElement>
+            annotatedElementInfo: AnnotatedElementInfo,
+            fields: List<AnnotatedElementFieldInfo>
     )
 
     /** Override to change the property-level annotations applied   */
-    fun addPropertyAnnotations(propertySpecBuilder: PropertySpec.Builder, variableElement: VariableElement)
+    fun addPropertyAnnotations(propertySpecBuilder: PropertySpec.Builder, fieldInfo: AnnotatedElementFieldInfo)
     fun getToPatchedFunctionBuilder(
             originalTypeParameter: ParameterSpec
     ): FunSpec.Builder
 
     fun getToTargetTypeFunctionBuilder(): FunSpec.Builder
-    fun toPropertyName(variableElement: VariableElement): String
-    fun toPropertyTypeName(variableElement: VariableElement): TypeName
-    fun toDefaultValueExpression(variableElement: VariableElement): Pair<String, Boolean>?
-    fun toTargetTypeStatement(fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String): Statement?
-    fun toPatchStatement(fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String): Statement?
-    fun toAltConstructorStatement(fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String): Statement?
-    fun toPropertySpecBuilder(fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName): PropertySpec.Builder
-    fun fieldProcessed(fieldIndex: Int, originalProperty: VariableElement, propertyName: String, propertyType: TypeName)
+    fun toPropertyName(fieldInfo: AnnotatedElementFieldInfo): String
+    fun toPropertyTypeName(fieldInfo: AnnotatedElementFieldInfo): TypeName
+    fun toDefaultValueExpression(fieldInfo: AnnotatedElementFieldInfo): Pair<String, Boolean>?
+    fun toTargetTypeStatement(
+        fieldIndex: Int,
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo,
+        commaOrEmpty: String
+    ): Statement?
+    fun toPatchStatement(
+        fieldIndex: Int,
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo,
+        commaOrEmpty: String
+    ): Statement?
+
+    fun toMutationPatchStatement(
+        fieldIndex: Int,
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo
+    ): Statement
+
+    fun toAltConstructorStatement(
+        fieldIndex: Int,
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo,
+        propertyName: String,
+        propertyType: TypeName,
+        commaOrEmpty: String
+    ): Statement?
+    fun toPropertySpecBuilder(
+        fieldIndex: Int,
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo,
+        propertyName: String,
+        propertyType: TypeName
+    ): PropertySpec.Builder
+    fun fieldProcessed(
+        fieldIndex: Int,
+        originalProperty: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo,
+        propertyName: String,
+        propertyType: TypeName
+    )
     fun getAltConstructorBuilder(): FunSpec.Builder
     fun getCompanionBuilder(): Builder
     fun getCreatorFunctionBuilder(originalTypeParameter: ParameterSpec): FunSpec.Builder
-    fun toCreatorStatement(fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String): Statement?
+    fun toCreatorStatement(
+        fieldIndex: Int,
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo,
+        propertyName: String,
+        propertyType: TypeName,
+        commaOrEmpty: String
+    ): Statement?
     fun addAltConstructor(typeSpecBuilder: Builder, dtoAltConstructorBuilder: FunSpec.Builder)
     fun finalize(typeSpecBuilder: Builder)
-    fun addProperty(originalProperty: VariableElement, fieldIndex: Int, typeSpecBuilder: Builder, fields: List<VariableElement>): Pair<String, TypeName>
-    fun findDefaultValueAnnotationValue(variableElement: VariableElement): Pair<String, Boolean>?
-    fun isNullable(variableElement: VariableElement, fieldContext: FieldContext): Boolean
-    fun isNonNull(variableElement: VariableElement, fieldContext: FieldContext): Boolean = !isNullable(variableElement, fieldContext)
-    fun maybeCheckForNull(variableElement: VariableElement, assignmentContext: AssignmentContext): AssignmentContext
+    fun addProperty(
+        originalProperty: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo,
+        fieldIndex: Int,
+        typeSpecBuilder: Builder,
+        fields: List<AnnotatedElementFieldInfo>
+    ): Pair<String, TypeName>
+    fun findDefaultValueAnnotationValue(
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo
+    ): Pair<String, Boolean>?
+    fun isNullable(fieldInfo: AnnotatedElementFieldInfo, fieldContext: FieldContext): Boolean
+    fun isNonNull(fieldInfo: AnnotatedElementFieldInfo, fieldContext: FieldContext): Boolean = !isNullable(fieldInfo, fieldContext)
+    fun maybeCheckForNull(fieldInfo: AnnotatedElementFieldInfo, assignmentContext: AssignmentContext): AssignmentContext
+    fun toConstructorOrCopyPatchStatement(
+        fieldIndex: Int,
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo,
+        commaOrEmpty: String
+    ): Statement?
 }
 
 
