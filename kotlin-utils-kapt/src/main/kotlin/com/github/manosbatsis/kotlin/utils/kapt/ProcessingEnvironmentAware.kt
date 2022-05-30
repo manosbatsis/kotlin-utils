@@ -9,6 +9,7 @@ import com.github.manosbatsis.kotlin.utils.kapt.processor.SimpleAnnotatedElement
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import me.eugeniomarletti.kotlin.metadata.jvm.descriptor
 import org.jetbrains.annotations.NotNull
 import java.util.regex.Matcher
 import java.util.regex.Pattern
@@ -17,8 +18,7 @@ import javax.lang.model.element.*
 import javax.lang.model.element.ElementKind.FIELD
 import javax.lang.model.type.*
 import javax.lang.model.util.ElementFilter
-import javax.tools.Diagnostic.Kind.ERROR
-import javax.tools.Diagnostic.Kind.NOTE
+import javax.tools.Diagnostic.Kind.*
 import kotlin.reflect.KClass
 
 
@@ -124,11 +124,6 @@ interface ProcessingEnvironmentAware {
                         else it
                     }
                     .associateBy { it.simpleName.toString() }
-                    .also {
-                        processingEnvironment.noteMessage {
-                            "getAllMembersForHierarchy, type: ${currentTypeElement.simpleName}, members: ${it.keys.joinToString(",")}"
-                        }
-                    }
             }
             // Overwrite as we go deeper into the class hierarchy
             .fold(mutableMapOf<String, Element>()) { acc, v ->
@@ -384,9 +379,12 @@ interface ProcessingEnvironmentAware {
     /** Returns the [TypeElement] represented by this [TypeMirror]. */
     fun TypeMirror.asTypeElement(): TypeElement {
         return if (this is PrimitiveType) {
-            val typeName = processingEnvironment.typeUtils.boxedClass(this)
-            processingEnvironment.elementUtils.getTypeElement("${typeName}")
-        } else processingEnvironment.typeUtils.asElement(this) as TypeElement
+            val hint = "${processingEnvironment.typeUtils.boxedClass(this)}"
+            processingEnvironment.elementUtils.getTypeElement(hint)
+        } else {
+            val hint = "${processingEnvironment.typeUtils.asElement(this)}"
+            processingEnvironment.elementUtils.getTypeElement(hint)
+        }
     }
 
     /** Returns true as long as this [Element] is not a [PrimitiveType] and does not have the [NotNull] core. */
@@ -468,7 +466,7 @@ interface ProcessingEnvironmentAware {
     /** Get the given annotation's value as a [TypeElement] if it exists, throw an error otherwise */
     fun Element.getAnnotationValueAsTypeElement(annotation: Class<out Annotation>, propertyName: String): TypeElement? =
         this.findAnnotationValueAsTypeElement(annotation, propertyName)
-            ?: throw IllegalStateException("Could not find a valid value for $propertyName")
+            ?: throw IllegalStateException("Could not find a getAnnotationValueAsTypeElementsvalid value for $propertyName")
 
     /** Get the given annotation's value as a [TypeElement] if it exists, null otherwise */
     fun Element.findAnnotationValueAsTypeElement(
@@ -476,6 +474,33 @@ interface ProcessingEnvironmentAware {
         propertyName: String
     ): TypeElement? =
         this.findAnnotationMirror(annotation)?.findValueAsTypeElement(propertyName)
+
+    /** Get the given annotation's value as a list of [TypeElement]s if it exists, empty otherwise */
+    fun Element.findAnnotationValueAsTypeElements(
+        annotation: Class<out Annotation>,
+        propertyName: String
+    ): List<TypeElement> =
+        this.findAnnotationMirror(annotation)
+            ?.findValueAsTypeElements(propertyName)
+            ?: emptyList()
+
+    /** Get the given annotation's value as a list of [ClassName] if it exists, empty otherwise */
+    fun Element.findAnnotationValueAsClassNames(
+        annotation: Class<out Annotation>,
+        propertyName: String
+    ): List<ClassName> =
+        this.findAnnotationMirror(annotation)
+            ?.findValueAsClassNames(propertyName)
+            ?: emptyList()
+
+    /** Get the given annotation's value as a list of canonical classname strings if it exists, empty otherwise */
+    fun Element.findAnnotationValueAsClassNameStrings(
+        annotation: Class<out Annotation>,
+        propertyName: String
+    ): List<String> =
+        this.findAnnotationMirror(annotation)
+            ?.findValueAsClassNameStrings(propertyName)
+            ?: emptyList()
 
     /** Get the given annotation's value if it exists, null otherwise */
     fun Element.findAnnotationValue(annotation: Class<out Annotation>, propertyName: String): AnnotationValue? =
@@ -487,13 +512,49 @@ interface ProcessingEnvironmentAware {
         return processingEnvironment.typeUtils.asElement(annotationMirrorValue) as TypeElement?
     }
 
+    /** Get the given annotation value as a list of [ClassName] instances if it exists, empty otherwise */
+    fun AnnotationMirror.findValueAsClassNames(memberName: String): List<ClassName> {
+        return this.findValueAsClassNameStrings(memberName).map { ClassName.bestGuess(it) }
+    }
+
+    /** Get the given annotation value as qualified classname strings if it exists, empty otherwise */
+    fun AnnotationMirror.findValueAsClassNameStrings(memberName: String): List<String> {
+        return this.findAnnotationValue(memberName)
+            ?.let {
+                val value = it.value
+                if (value is List<*>) value
+                else if (value is Array<*>)  value.toList()
+                else listOf(value)
+            }
+            ?.filterNotNull()
+            ?.map {
+                var value = it.toString()
+                if (value.endsWith(".class")) value = value.substring(0, value.length - 6)
+                if (value.endsWith("::class.java")) value = value.substring(0, value.length - 12)
+                value
+            }
+            ?: return emptyList()
+    }
+
+
+    /** Get the given annotation values as a list of [TypeElement] instances if it exists, empty otherwise */
+    fun AnnotationMirror.findValueAsTypeElements(memberName: String): List<TypeElement> {
+        return this.findValueAsClassNames(memberName)
+            .map {
+                processingEnvironment.elementUtils.getTypeElement(it.canonicalName)
+            }
+    }
+
+
     /** Get the given annotation value as a [KClass] if it exists and available in the classpath, throw an error otherwise */
+    @Deprecated("Use findValueAsTypeElements or findValueAsClassNames or findValueAsClassNameStrings")
     fun AnnotationMirror.getValueAsKClass(memberName: String): KClass<*> {
         return this.findValueAsKClass(memberName)
             ?: throw IllegalStateException("Could not find a valid value for $memberName")
     }
 
     /** Get the given annotation value as a [KClass] if it exists and available in the classpath, null otherwise */
+    @Deprecated("Use findValueAsTypeElements or findValueAsClassNames or findValueAsClassNameStrings")
     fun AnnotationMirror.findValueAsKClass(memberName: String): KClass<*>? {
         val baseFlowAnnotationValue = this.findAnnotationValue(memberName) ?: return null
         return baseFlowAnnotationValue.value as KClass<*>
@@ -556,11 +617,13 @@ interface ProcessingEnvironmentAware {
     }
 
     /** Get the given annotation value as a `List<VariableElement>`if it exists, an empty list otherwise */
+    @Deprecated("Use findValueAsTypeElements or findValueAsClassNames or findValueAsClassNameStrings")
     fun AnnotationMirror.findAnnotationValueListTypeMirror(memberName: String): List<TypeMirror>? {
         return findAnnotationValueList(memberName)?.map { it.value as TypeMirror }
     }
 
     /** Get the given annotation value as a `List<TypeElement>`if it exists, null otherwise */
+    @Deprecated("Use findValueAsTypeElements or findValueAsClassNames or findValueAsClassNameStrings")
     fun AnnotationMirror.findAnnotationValueListTypeElement(memberName: String): List<TypeElement>? {
         return findAnnotationValueListTypeMirror(memberName)
             ?.map { processingEnvironment.typeUtils.asElement(it) as TypeElement }

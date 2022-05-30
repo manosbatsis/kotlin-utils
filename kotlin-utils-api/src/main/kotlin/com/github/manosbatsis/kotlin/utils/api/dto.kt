@@ -19,7 +19,7 @@ interface Dto<T : Any> {
             newValue: T?,
             originalValue: T
         ): T = if(newValue != null && newValue != originalValue)
-            throw IllegalArgumentException("${ERR_NON_UPDATABLE}$fieldName from $originalValue to $newValue")
+            throw IllegalArgumentException("${ERR_NON_UPDATABLE}$fieldName from $originalValue to $newValue ")
         else originalValue
     }
 
