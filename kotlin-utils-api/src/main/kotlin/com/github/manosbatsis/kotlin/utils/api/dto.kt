@@ -19,7 +19,7 @@ interface Dto<T : Any> {
             newValue: T?,
             originalValue: T
         ): T = if(newValue != null && newValue != originalValue)
-            throw IllegalArgumentException("${ERR_NON_UPDATABLE}$fieldName")
+            throw IllegalArgumentException("${ERR_NON_UPDATABLE}$fieldName from $originalValue to $newValue ")
         else originalValue
     }
 
@@ -52,6 +52,14 @@ interface Dto<T : Any> {
 @Retention(AnnotationRetention.SOURCE)
 @Target(AnnotationTarget.FIELD, AnnotationTarget.PROPERTY_GETTER)
 annotation class DefaultValue(
-        val value: String,
-        val nullable: Boolean = false
+    val value: String,
+    val nullable: Boolean = false
 )
+
+
+/**
+ * Let annotation processors know the property is not meant to be updated.
+ */
+@Retention(AnnotationRetention.SOURCE)
+@Target(AnnotationTarget.FIELD, AnnotationTarget.PROPERTY_GETTER)
+annotation class NoUpdate()

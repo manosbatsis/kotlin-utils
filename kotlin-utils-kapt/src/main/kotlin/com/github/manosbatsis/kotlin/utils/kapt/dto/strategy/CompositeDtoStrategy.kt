@@ -1,6 +1,7 @@
 package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy
 
 import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.composition.*
+import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementFieldInfo
 import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 
 
@@ -21,6 +22,5 @@ open class CompositeDtoStrategy(
             composition.dtoTypeStrategy,
             composition.dtoMembersStrategy
     )
-
 }
 

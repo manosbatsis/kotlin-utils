@@ -3,8 +3,9 @@ package com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.composition
 import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.DtoStrategy
 import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util.AssignmentContext
 import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util.FieldContext
+import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementFieldInfo
+import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementInfo
 import com.squareup.kotlinpoet.*
-import javax.lang.model.element.VariableElement
 
 /**
  * Extends [DtoStrategyLesserComposition] with a [DtoMembersStrategy] member and
@@ -13,6 +14,8 @@ import javax.lang.model.element.VariableElement
  */
 interface DtoStrategyComposition : DtoStrategyLesserComposition, DtoMembersStrategy, DtoStrategy {
     val dtoMembersStrategy: DtoMembersStrategy
+
+
 
     override fun dtoTypeSpec(): TypeSpec = dtoTypeSpecBuilder().build()
 
@@ -33,34 +36,37 @@ interface DtoStrategyComposition : DtoStrategyLesserComposition, DtoMembersStrat
 
     /** Process original type fields and add DTO members */
     override fun addMembers(typeSpecBuilder: TypeSpec.Builder) {
-        processFields(typeSpecBuilder, getFieldsToProcess())
-        processDtoOnlyFields(typeSpecBuilder, getExtraFieldsFromMixin())
+        processFields(typeSpecBuilder, annotatedElementInfo, getFieldsToProcess())
+        processDtoOnlyFields(typeSpecBuilder, annotatedElementInfo, getExtraFieldsFromMixin())
         finalize(typeSpecBuilder)
     }
 
     override fun getFieldExcludes(): List<String> =
             annotatedElementInfo.ignoreProperties
 
-    override fun getFieldsToProcess(): List<VariableElement> =
+    override fun getFieldsToProcess(): List<AnnotatedElementFieldInfo> =
             annotatedElementInfo.primaryTargetTypeElementFields.filtered()
 
-    override fun getExtraFieldsFromMixin(): List<VariableElement> =
+    override fun getExtraFieldsFromMixin(): List<AnnotatedElementFieldInfo> =
             annotatedElementInfo.primaryTargetTypeElementFields.toSimpleNames()
                     .plus(getFieldExcludes())
                     .let { annotatedElementInfo.mixinTypeElementFields.excludeNames(it) }
 
     // DtoMembersStrategy
     override fun maybeCheckForNull(
-            variableElement: VariableElement,
+            fieldInfo: AnnotatedElementFieldInfo,
             assignmentContext: AssignmentContext
-    ): AssignmentContext = dtoMembersStrategy.maybeCheckForNull(variableElement, assignmentContext)
+    ): AssignmentContext = dtoMembersStrategy.maybeCheckForNull(fieldInfo, assignmentContext)
 
-    override fun isNullable(variableElement: VariableElement, fieldContext: FieldContext): Boolean =
-            dtoMembersStrategy.isNullable(variableElement, fieldContext)
+    override fun isNullable(fieldInfo: AnnotatedElementFieldInfo, fieldContext: FieldContext): Boolean =
+            dtoMembersStrategy.isNullable(fieldInfo, fieldContext)
 
     /** Override to modify processing of individual fields */
-    override fun processFields(typeSpecBuilder: TypeSpec.Builder, fields: List<VariableElement>) =
-            dtoMembersStrategy.processFields(typeSpecBuilder, fields)
+    override fun processFields(
+        typeSpecBuilder: TypeSpec.Builder,
+        annotatedElementInfo: AnnotatedElementInfo,
+        fields: List<AnnotatedElementFieldInfo>
+    ) = dtoMembersStrategy.processFields(typeSpecBuilder, annotatedElementInfo, fields)
 
     /**
      * Override to modify processing of DTO-specific fields,
@@ -68,12 +74,13 @@ interface DtoStrategyComposition : DtoStrategyLesserComposition, DtoMembersStrat
      */
     override fun processDtoOnlyFields(
             typeSpecBuilder: TypeSpec.Builder,
-            fields: List<VariableElement>
-    ) = dtoMembersStrategy.processDtoOnlyFields(typeSpecBuilder, fields)
+            annotatedElementInfo: AnnotatedElementInfo,
+            fields: List<AnnotatedElementFieldInfo>
+    ) = dtoMembersStrategy.processDtoOnlyFields(typeSpecBuilder, annotatedElementInfo, fields)
 
     /** Override to change the property-level annotations applied   */
-    override fun addPropertyAnnotations(propertySpecBuilder: PropertySpec.Builder, variableElement: VariableElement) =
-            dtoMembersStrategy.addPropertyAnnotations(propertySpecBuilder, variableElement)
+    override fun addPropertyAnnotations(propertySpecBuilder: PropertySpec.Builder, fieldInfo: AnnotatedElementFieldInfo) =
+            dtoMembersStrategy.addPropertyAnnotations(propertySpecBuilder, fieldInfo)
 
     override fun getToPatchedFunctionBuilder(originalTypeParameter: ParameterSpec): FunSpec.Builder =
             dtoMembersStrategy.getToPatchedFunctionBuilder(originalTypeParameter)
@@ -81,37 +88,82 @@ interface DtoStrategyComposition : DtoStrategyLesserComposition, DtoMembersStrat
     override fun getToTargetTypeFunctionBuilder(): FunSpec.Builder =
             dtoMembersStrategy.getToTargetTypeFunctionBuilder()
 
-    override fun toPropertyName(variableElement: VariableElement): String =
-            dtoMembersStrategy.toPropertyName(variableElement)
+    override fun toPropertyName(fieldInfo: AnnotatedElementFieldInfo): String =
+            dtoMembersStrategy.toPropertyName(fieldInfo)
 
-    override fun toPropertyTypeName(variableElement: VariableElement): TypeName =
-            dtoMembersStrategy.toPropertyTypeName(variableElement)
+    override fun toPropertyTypeName(fieldInfo: AnnotatedElementFieldInfo): TypeName =
+            dtoMembersStrategy.toPropertyTypeName(fieldInfo)
 
-    override fun toDefaultValueExpression(variableElement: VariableElement): Pair<String, Boolean>? =
-            dtoMembersStrategy.toDefaultValueExpression(variableElement)
+    override fun toDefaultValueExpression(fieldInfo: AnnotatedElementFieldInfo): Pair<String, Boolean>? =
+            dtoMembersStrategy.toDefaultValueExpression(fieldInfo)
 
     override fun toTargetTypeStatement(
-            fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String
-    ): DtoMembersStrategy.Statement? = dtoMembersStrategy.toTargetTypeStatement(fieldIndex, variableElement, commaOrEmpty)
+            fieldIndex: Int,
+            fieldInfo: AnnotatedElementFieldInfo,
+            annotatedElementInfo: AnnotatedElementInfo,
+            commaOrEmpty: String
+    ): DtoMembersStrategy.Statement? = dtoMembersStrategy.toTargetTypeStatement(
+        fieldIndex, fieldInfo, annotatedElementInfo, commaOrEmpty
+    )
 
     override fun toPatchStatement(
-            fieldIndex: Int, variableElement: VariableElement, commaOrEmpty: String
-    ): DtoMembersStrategy.Statement? = dtoMembersStrategy.toPatchStatement(fieldIndex, variableElement, commaOrEmpty)
+            fieldIndex: Int,
+            fieldInfo: AnnotatedElementFieldInfo,
+            annotatedElementInfo: AnnotatedElementInfo,
+            commaOrEmpty: String
+    ): DtoMembersStrategy.Statement? = dtoMembersStrategy.toPatchStatement(
+        fieldIndex, fieldInfo, annotatedElementInfo, commaOrEmpty
+    )
+
+
+    override fun toConstructorOrCopyPatchStatement(
+        fieldIndex: Int,
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo,
+        commaOrEmpty: String
+    ): DtoMembersStrategy.Statement? = dtoMembersStrategy.toConstructorOrCopyPatchStatement(
+        fieldIndex, fieldInfo, annotatedElementInfo, commaOrEmpty
+    )
+
+    override fun toMutationPatchStatement(
+        fieldIndex: Int,
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo
+    ): DtoMembersStrategy.Statement = dtoMembersStrategy.toMutationPatchStatement(
+        fieldIndex, fieldInfo, annotatedElementInfo
+    )
+
 
     override fun toAltConstructorStatement(
-            fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String
+            fieldIndex: Int,
+            fieldInfo: AnnotatedElementFieldInfo,
+            annotatedElementInfo: AnnotatedElementInfo,
+            propertyName: String,
+            propertyType: TypeName,
+            commaOrEmpty: String
     ): DtoMembersStrategy.Statement? = dtoMembersStrategy.toAltConstructorStatement(
-            fieldIndex, variableElement, propertyName, propertyType, commaOrEmpty)
+            fieldIndex, fieldInfo, annotatedElementInfo, propertyName, propertyType, commaOrEmpty
+    )
 
     override fun toPropertySpecBuilder(
-            fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName
+            fieldIndex: Int,
+            fieldInfo: AnnotatedElementFieldInfo,
+            annotatedElementInfo: AnnotatedElementInfo,
+            propertyName: String,
+            propertyType: TypeName
     ): PropertySpec.Builder = dtoMembersStrategy.toPropertySpecBuilder(
-            fieldIndex, variableElement, propertyName, propertyType)
+            fieldIndex, fieldInfo, annotatedElementInfo, propertyName, propertyType
+    )
 
     override fun fieldProcessed(
-            fieldIndex: Int, originalProperty: VariableElement, propertyName: String, propertyType: TypeName
+            fieldIndex: Int,
+            originalProperty: AnnotatedElementFieldInfo,
+            annotatedElementInfo: AnnotatedElementInfo,
+            propertyName: String,
+            propertyType: TypeName
     ) = dtoMembersStrategy.fieldProcessed(
-            fieldIndex, originalProperty, propertyName, propertyType)
+            fieldIndex, originalProperty, annotatedElementInfo, propertyName, propertyType
+    )
 
     override fun getAltConstructorBuilder(): FunSpec.Builder = dtoMembersStrategy.getAltConstructorBuilder()
 
@@ -121,24 +173,37 @@ interface DtoStrategyComposition : DtoStrategyLesserComposition, DtoMembersStrat
             dtoMembersStrategy.getCreatorFunctionBuilder(originalTypeParameter)
 
     override fun toCreatorStatement(
-            fieldIndex: Int, variableElement: VariableElement, propertyName: String, propertyType: TypeName, commaOrEmpty: String
+            fieldIndex: Int,
+            fieldInfo: AnnotatedElementFieldInfo,
+            annotatedElementInfo: AnnotatedElementInfo,
+            propertyName: String,
+            propertyType: TypeName,
+            commaOrEmpty: String
     ): DtoMembersStrategy.Statement? = dtoMembersStrategy.toCreatorStatement(
-            fieldIndex, variableElement, propertyName, propertyType, commaOrEmpty)
+            fieldIndex, fieldInfo, annotatedElementInfo, propertyName, propertyType, commaOrEmpty
+    )
 
     override fun addAltConstructor(typeSpecBuilder: TypeSpec.Builder, dtoAltConstructorBuilder: FunSpec.Builder) =
-            dtoMembersStrategy.addAltConstructor(typeSpecBuilder, dtoAltConstructorBuilder)
+            dtoMembersStrategy.addAltConstructor(typeSpecBuilder, dtoAltConstructorBuilder
+            )
 
     override fun finalize(typeSpecBuilder: TypeSpec.Builder) = dtoMembersStrategy.finalize(typeSpecBuilder)
 
 
     override fun addProperty(
-            originalProperty: VariableElement,
+            originalProperty: AnnotatedElementFieldInfo,
+            annotatedElementInfo: AnnotatedElementInfo,
             fieldIndex: Int,
             typeSpecBuilder: TypeSpec.Builder,
-            fields: List<VariableElement>
-    ): Pair<String, TypeName> = dtoMembersStrategy.addProperty(originalProperty, fieldIndex, typeSpecBuilder, fields)
+            fields: List<AnnotatedElementFieldInfo>
+    ): Pair<String, TypeName> = dtoMembersStrategy.addProperty(
+        originalProperty, annotatedElementInfo, fieldIndex, typeSpecBuilder, fields
+    )
 
-    override fun findDefaultValueAnnotationValue(variableElement: VariableElement): Pair<String, Boolean>? =
-            dtoMembersStrategy.findDefaultValueAnnotationValue(variableElement)
+    override fun findDefaultValueAnnotationValue(
+        fieldInfo: AnnotatedElementFieldInfo,
+        annotatedElementInfo: AnnotatedElementInfo
+    ): Pair<String, Boolean>? =
+            dtoMembersStrategy.findDefaultValueAnnotationValue(fieldInfo, annotatedElementInfo)
 }
 

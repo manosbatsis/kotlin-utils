@@ -1,11 +1,15 @@
 package com.github.manosbatsis.kotlin.utils
 
+import com.github.manosbatsis.kotlin.utils.api.NoUpdate
 import com.github.manosbatsis.kotlin.utils.kapt.dto.DtoInputContext
 import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.composition.DtoMembersStrategy.Statement
 import com.github.manosbatsis.kotlin.utils.kapt.dto.strategy.util.GetterAsFieldAdapter
+import com.github.manosbatsis.kotlin.utils.kapt.processor.AnnotatedElementFieldInfo
+import com.github.manosbatsis.kotlin.utils.kapt.processor.SimpleAnnotatedElementFieldInfo
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.AnnotationSpec.UseSiteTarget
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import me.eugeniomarletti.kotlin.metadata.jvm.descriptor
 import org.jetbrains.annotations.NotNull
 import java.util.regex.Matcher
 import java.util.regex.Pattern
@@ -14,8 +18,7 @@ import javax.lang.model.element.*
 import javax.lang.model.element.ElementKind.FIELD
 import javax.lang.model.type.*
 import javax.lang.model.util.ElementFilter
-import javax.tools.Diagnostic.Kind.ERROR
-import javax.tools.Diagnostic.Kind.NOTE
+import javax.tools.Diagnostic.Kind.*
 import kotlin.reflect.KClass
 
 
@@ -61,24 +64,51 @@ interface ProcessingEnvironmentAware {
             && ((simpleName.startsWith("get") && "$simpleName" != "getClass")
             || (simpleName.startsWith("is") && returnType.kind == TypeKind.BOOLEAN))
 
+    fun Element.isSetter(): Boolean = (this is ExecutableElement
+            && ElementKind.METHOD == kind
+            && parameters.size == 1
+            && returnType.kind == TypeKind.VOID
+            && simpleName.startsWith("set"))
+
     fun TypeElement.getTypeElementHierarchy(): List<TypeElement> {
         val typeElements = mutableListOf<TypeElement>()
         var currentTypeElement = this
         val topLevelTypes = listOf(Object::class.java.canonicalName, Any::class.qualifiedName.toString())
         while (!topLevelTypes.contains(currentTypeElement.qualifiedName.toString())) {
-            println("getTypeElementHierarchy, currentTypeElement: ${currentTypeElement}")
 
             typeElements.add(currentTypeElement)
             currentTypeElement = currentTypeElement.superclass.asTypeElement()
         }
-        processingEnvironment.noteMessage {
-            "getTypeElementHierarchy: ${typeElements.joinToString(",") { it.qualifiedName }}"
-        }
         return typeElements
     }
 
-    fun TypeElement.getFieldsOnlyForHierarchy(fieldsOnly: Boolean = false): List<VariableElement>{
-        return getAllMembersForHierarchy(true).map { it as VariableElement }
+    fun TypeElement.getFieldsOnlyForHierarchy(adaptInterfaceGetters: Boolean = false): List<VariableElement>{
+        return if (adaptInterfaceGetters && ElementKind.INTERFACE == kind) {
+            val allMembers = this.getAllMembersForHierarchy()
+            allMembers.mapNotNull { elem ->
+                if (elem is ExecutableElement && elem.isGetter()) GetterAsFieldAdapter(
+                    elem,
+                    false,
+                    allMembers
+                ) else null
+            }
+        }
+        else getAllMembersForHierarchy(true).map { it as VariableElement }
+    }
+
+    fun TypeElement.getSettersForHierarchy(): List<ExecutableElement>{
+        return getAllMembersForHierarchy(false)
+            .mapNotNull {
+                if(it is ExecutableElement && it.isSetter()) it else null
+            }
+    }
+
+    fun ExecutableElement.isCompatibleSetterFor(variableElement: VariableElement): Boolean{
+        return isSetter()
+                && parameters.single().asType().asTypeElement() ==
+                    variableElement.asType().asTypeElement()
+                && variableElement.simpleName.toString() ==
+                    simpleName.toString().removePrefix("set").decapitalize()
     }
 
     fun TypeElement.getAllMembersForHierarchy(fieldsOnly: Boolean = false): List<Element> {
@@ -94,11 +124,6 @@ interface ProcessingEnvironmentAware {
                         else it
                     }
                     .associateBy { it.simpleName.toString() }
-                    .also {
-                        processingEnvironment.noteMessage {
-                            "getAllMembersForHierarchy, type: ${currentTypeElement.simpleName}, members: ${it.keys.joinToString(",")}"
-                        }
-                    }
             }
             // Overwrite as we go deeper into the class hierarchy
             .fold(mutableMapOf<String, Element>()) { acc, v ->
@@ -115,6 +140,42 @@ interface ProcessingEnvironmentAware {
             .values.toList()
     }
 
+    fun isUpdatable(variableElement: VariableElement): Boolean = !variableElement.hasAnnotation(NoUpdate::class.java)
+
+    fun getFieldInfos(typeElement: TypeElement, outOfAnnotationScope: Boolean = false): List<AnnotatedElementFieldInfo>{
+        val allFields =  typeElement.getFieldsOnlyForHierarchy(true)
+        val constructorFields =  typeElement.accessibleConstructorParameterFields(true)
+        val setters =  typeElement.getSettersForHierarchy()
+        return allFields.map {
+            SimpleAnnotatedElementFieldInfo(
+                variableElement = it,
+                isInAnnotationScope = !outOfAnnotationScope,
+                isUpdatable = isUpdatable(it),
+                isMutableVariable = (!typeElement.isKotlin() && it.modifiers.contains(Modifier.PUBLIC))
+                        || setters.find { setter -> setter.isCompatibleSetterFor(it) } != null,
+                isConstructorParam = constructorFields.contains(it),
+                isConstructorSource = false
+            )
+        }
+    }
+
+    fun getFieldInfos(executableElement: ExecutableElement): List<AnnotatedElementFieldInfo>{
+        val containerElement = executableElement.enclosingElement as TypeElement
+        val elementFields = getFieldInfos(containerElement, true)
+            .map { it as SimpleAnnotatedElementFieldInfo }
+        val setters =  containerElement.getSettersForHierarchy()
+
+        val constructorParams = executableElement.parameters
+            .associateBy { it.simpleName.toString() }
+            .toMutableMap()
+
+        return elementFields.map { field ->
+            constructorParams[field.variableElement.simpleName.toString()]
+                ?.let { field.copy(isInAnnotationScope = true, isConstructorSource = true) }
+                ?: field
+        }
+    }
+
     fun TypeElement.isKotlin(): Boolean{
         return processingEnvironment.elementUtils.getAllAnnotationMirrors(this).any { (
                 it.annotationType.asElement() as TypeElement).qualifiedName.toString() == "kotlin.Metadata"
@@ -125,19 +186,6 @@ interface ProcessingEnvironmentAware {
     fun TypeElement.accessibleConstructorParameterFields(adaptInterfaceGetters: Boolean = false): List<VariableElement> {
         val allMembers = this.getAllMembersForHierarchy()
         val fields = this.getFieldsOnlyForHierarchy()
-        println(
-            "accessibleConstructorParameterFields for ${simpleName}, allMembers: ${
-                allMembers.map { it.simpleName }.joinToString(",")
-            }"
-        )
-        println(
-            "accessibleConstructorParameterFields for ${simpleName}, fields: ${
-                fields.map { it.simpleName }.joinToString(",")
-            }"
-        )
-        println("accessibleConstructorParameterFields for ${simpleName}, interface: ${ElementKind.INTERFACE == kind}")
-        println("accessibleConstructorParameterFields for ${simpleName}, use adapters: ${fields.isEmpty() && adaptInterfaceGetters && ElementKind.INTERFACE == kind}")
-
         val constructorFields = if (fields.isEmpty() && adaptInterfaceGetters && ElementKind.INTERFACE == kind)
             allMembers.mapNotNull { elem ->
                 if (elem is ExecutableElement && elem.isGetter()) GetterAsFieldAdapter(
@@ -148,8 +196,6 @@ interface ProcessingEnvironmentAware {
             }
         else {
             val constructors = ElementFilter.constructorsIn(allMembers)
-            println("accessibleConstructorParameterFields for ${simpleName}, constructors: ${constructors.size}")
-
             val constructorParamNames = constructors
                 .flatMap { it.parameters }
                 .filterNotNull()
@@ -159,33 +205,14 @@ interface ProcessingEnvironmentAware {
                 }
                 .map { it.simpleName.toString() }
                 .toSet()
-            println(
-                "accessibleConstructorParameterFields for ${simpleName}, constructorParamNames(${constructorParamNames.size}): ${
-                    constructorParamNames.joinToString(
-                        ","
-                    )
-                }"
-            )
 
             val nonArgPrefixedConstructorParamNames = constructorParamNames.filterNot { it.startsWith("arg") }
-            println(
-                "accessibleConstructorParameterFields for ${simpleName}, nonArgPrefixedConstructorParamNames(${nonArgPrefixedConstructorParamNames.size}): ${
-                    nonArgPrefixedConstructorParamNames.joinToString(
-                        ","
-                    )
-                }"
-            )
             // Ignore filtering if contructor arg names are missing
             if (nonArgPrefixedConstructorParamNames.isNotEmpty())
                 fields.filter { constructorParamNames.contains(it.simpleName.toString()) }
             else fields
 
         }
-        println(
-            "accessibleConstructorParameterFields for ${simpleName}, constructorFields: ${
-                constructorFields.map { it.simpleName }.joinToString(",")
-            }"
-        )
         return constructorFields
     }
 
@@ -352,9 +379,12 @@ interface ProcessingEnvironmentAware {
     /** Returns the [TypeElement] represented by this [TypeMirror]. */
     fun TypeMirror.asTypeElement(): TypeElement {
         return if (this is PrimitiveType) {
-            val typeName = processingEnvironment.typeUtils.boxedClass(this)
-            processingEnvironment.elementUtils.getTypeElement("${typeName}")
-        } else processingEnvironment.typeUtils.asElement(this) as TypeElement
+            val hint = "${processingEnvironment.typeUtils.boxedClass(this)}"
+            processingEnvironment.elementUtils.getTypeElement(hint)
+        } else {
+            val hint = "${processingEnvironment.typeUtils.asElement(this)}"
+            processingEnvironment.elementUtils.getTypeElement(hint)
+        }
     }
 
     /** Returns true as long as this [Element] is not a [PrimitiveType] and does not have the [NotNull] core. */
@@ -436,7 +466,7 @@ interface ProcessingEnvironmentAware {
     /** Get the given annotation's value as a [TypeElement] if it exists, throw an error otherwise */
     fun Element.getAnnotationValueAsTypeElement(annotation: Class<out Annotation>, propertyName: String): TypeElement? =
         this.findAnnotationValueAsTypeElement(annotation, propertyName)
-            ?: throw IllegalStateException("Could not find a valid value for $propertyName")
+            ?: throw IllegalStateException("Could not find a getAnnotationValueAsTypeElementsvalid value for $propertyName")
 
     /** Get the given annotation's value as a [TypeElement] if it exists, null otherwise */
     fun Element.findAnnotationValueAsTypeElement(
@@ -444,6 +474,33 @@ interface ProcessingEnvironmentAware {
         propertyName: String
     ): TypeElement? =
         this.findAnnotationMirror(annotation)?.findValueAsTypeElement(propertyName)
+
+    /** Get the given annotation's value as a list of [TypeElement]s if it exists, empty otherwise */
+    fun Element.findAnnotationValueAsTypeElements(
+        annotation: Class<out Annotation>,
+        propertyName: String
+    ): List<TypeElement> =
+        this.findAnnotationMirror(annotation)
+            ?.findValueAsTypeElements(propertyName)
+            ?: emptyList()
+
+    /** Get the given annotation's value as a list of [ClassName] if it exists, empty otherwise */
+    fun Element.findAnnotationValueAsClassNames(
+        annotation: Class<out Annotation>,
+        propertyName: String
+    ): List<ClassName> =
+        this.findAnnotationMirror(annotation)
+            ?.findValueAsClassNames(propertyName)
+            ?: emptyList()
+
+    /** Get the given annotation's value as a list of canonical classname strings if it exists, empty otherwise */
+    fun Element.findAnnotationValueAsClassNameStrings(
+        annotation: Class<out Annotation>,
+        propertyName: String
+    ): List<String> =
+        this.findAnnotationMirror(annotation)
+            ?.findValueAsClassNameStrings(propertyName)
+            ?: emptyList()
 
     /** Get the given annotation's value if it exists, null otherwise */
     fun Element.findAnnotationValue(annotation: Class<out Annotation>, propertyName: String): AnnotationValue? =
@@ -455,13 +512,49 @@ interface ProcessingEnvironmentAware {
         return processingEnvironment.typeUtils.asElement(annotationMirrorValue) as TypeElement?
     }
 
+    /** Get the given annotation value as a list of [ClassName] instances if it exists, empty otherwise */
+    fun AnnotationMirror.findValueAsClassNames(memberName: String): List<ClassName> {
+        return this.findValueAsClassNameStrings(memberName).map { ClassName.bestGuess(it) }
+    }
+
+    /** Get the given annotation value as qualified classname strings if it exists, empty otherwise */
+    fun AnnotationMirror.findValueAsClassNameStrings(memberName: String): List<String> {
+        return this.findAnnotationValue(memberName)
+            ?.let {
+                val value = it.value
+                if (value is List<*>) value
+                else if (value is Array<*>)  value.toList()
+                else listOf(value)
+            }
+            ?.filterNotNull()
+            ?.map {
+                var value = it.toString()
+                if (value.endsWith(".class")) value = value.substring(0, value.length - 6)
+                if (value.endsWith("::class.java")) value = value.substring(0, value.length - 12)
+                value
+            }
+            ?: return emptyList()
+    }
+
+
+    /** Get the given annotation values as a list of [TypeElement] instances if it exists, empty otherwise */
+    fun AnnotationMirror.findValueAsTypeElements(memberName: String): List<TypeElement> {
+        return this.findValueAsClassNames(memberName)
+            .map {
+                processingEnvironment.elementUtils.getTypeElement(it.canonicalName)
+            }
+    }
+
+
     /** Get the given annotation value as a [KClass] if it exists and available in the classpath, throw an error otherwise */
+    @Deprecated("Use findValueAsTypeElements or findValueAsClassNames or findValueAsClassNameStrings")
     fun AnnotationMirror.getValueAsKClass(memberName: String): KClass<*> {
         return this.findValueAsKClass(memberName)
             ?: throw IllegalStateException("Could not find a valid value for $memberName")
     }
 
     /** Get the given annotation value as a [KClass] if it exists and available in the classpath, null otherwise */
+    @Deprecated("Use findValueAsTypeElements or findValueAsClassNames or findValueAsClassNameStrings")
     fun AnnotationMirror.findValueAsKClass(memberName: String): KClass<*>? {
         val baseFlowAnnotationValue = this.findAnnotationValue(memberName) ?: return null
         return baseFlowAnnotationValue.value as KClass<*>
@@ -522,18 +615,15 @@ interface ProcessingEnvironmentAware {
     ): List<T>? {
         return findAnnotationValueList(memberName)?.map { java.lang.Enum.valueOf(enumType, it.value.toString()) }
     }
-/*
-getDtoStrategies, it: com.github.manosbatsis.vaultaire.annotation.VaultaireDtoStrategyKeys.DEFAULT
-Note: getDtoStrategies, it type: class com.sun.tools.javac.code.Attribute$Enum
-Note: getDtoStrategies, it.val;ue: DEFAULT
-Note: getDtoStrategies, it.val;ue type: class com.sun.tools.javac.code.Symbol$VarSymbol
-Note: getDtoStrategies, it: com.github.manosbatsis.vaultaire.annotation.VaultaireDtoStrategyKeys.LITENote: getDtoStrategies, it type: class com.sun.tools.javac.code.Attribute$EnumNote: getDtoStrategies, it.val;ue: LITENote: getDtoStrategies, it.val;ue type: class com.sun.tools.javac.code.Symbol$VarSymbol                                                                                                                                                                                                       */
+
     /** Get the given annotation value as a `List<VariableElement>`if it exists, an empty list otherwise */
+    @Deprecated("Use findValueAsTypeElements or findValueAsClassNames or findValueAsClassNameStrings")
     fun AnnotationMirror.findAnnotationValueListTypeMirror(memberName: String): List<TypeMirror>? {
         return findAnnotationValueList(memberName)?.map { it.value as TypeMirror }
     }
 
     /** Get the given annotation value as a `List<TypeElement>`if it exists, null otherwise */
+    @Deprecated("Use findValueAsTypeElements or findValueAsClassNames or findValueAsClassNameStrings")
     fun AnnotationMirror.findAnnotationValueListTypeElement(memberName: String): List<TypeElement>? {
         return findAnnotationValueListTypeMirror(memberName)
             ?.map { processingEnvironment.typeUtils.asElement(it) as TypeElement }
