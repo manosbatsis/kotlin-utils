@@ -132,11 +132,6 @@ interface ProcessingEnvironmentAware {
                 }
                 acc
             }
-            .also {
-                processingEnvironment.noteMessage {
-                    "getAllMembersForHierarchy, all members: ${it.keys.joinToString(",")}"
-                }
-            }
             .values.toList()
     }
 
