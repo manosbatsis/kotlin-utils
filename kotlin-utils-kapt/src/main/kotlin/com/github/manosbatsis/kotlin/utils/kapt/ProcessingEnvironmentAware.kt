@@ -649,12 +649,15 @@ interface ProcessingEnvironmentAware {
         return this
     }
 
-    fun String.camelToUnderscores(): String {
+    fun String.camelToUnderscores(): String = this.camelToInput("_")
+    fun String.camelToWords(): String = this.camelToInput(" ")
+
+    fun String.camelToInput(input: String): String {
         val m: Matcher = camelToUnderscorePattern.matcher(this.decapitalize())
 
         val sb = StringBuffer()
         while (m.find()) {
-            m.appendReplacement(sb, "_" + m.group().toLowerCase())
+            m.appendReplacement(sb, input + m.group().toLowerCase())
         }
         m.appendTail(sb)
         return sb.toString()
