@@ -260,7 +260,7 @@ open class SimpleDtoMembersStrategy(
                 "$propertyName = " else ""
         val isUpdatable = annotatedElementInfo.isUpdatable(fieldInfo)
         val maybeAndIfEmpty = if(fieldInfo.variableElement.isIterable()) " && this.${propertyName}!!.isNotEmpty()" else ""
-        return if(fieldInfo.isMutableVariable)
+        return if(fieldInfo.isMutableVariable || !annotatedElementInfo.primaryTargetTypeElement.isKotlin())
             if(isUpdatable || annotatedElementInfo.updateRequiresNewInstance)
                 DtoMembersStrategy.Statement("${maybeNamedParam}if(this.$propertyName != null$maybeAndIfEmpty) this.$propertyName!! else original.$propertyName$commaOrEmpty")
             else DtoMembersStrategy.Statement("${maybeNamedParam}errNonUpdatableOrOriginalValue(\"$propertyName\", this.$propertyName, original.$propertyName)$commaOrEmpty")
